@@ -47,9 +47,9 @@ export default function DashboardScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   // --- YENİ EKLENEN GALERİ STATE'LERİ ---
-  const [editGalleryImages, setEditGalleryImages] = useState([]); // Veritabanındaki mevcut resimler
-  const [newGalleryImages, setNewGalleryImages] = useState([]); // Telefondan yeni seçilen resimler
-  const [deletedGalleryIDs, setDeletedGalleryIDs] = useState([]); // Silinmek istenen mevcut resim ID'leri
+  const [editGalleryImages, setEditGalleryImages] = useState([]); 
+  const [newGalleryImages, setNewGalleryImages] = useState([]); 
+  const [deletedGalleryIDs, setDeletedGalleryIDs] = useState([]);
 
   // 1. ANA VERİLERİ ÇEK
   const fetchDashboardData = async () => {
@@ -155,7 +155,6 @@ export default function DashboardScreen() {
     
     setEditModalVisible(true);
 
-    // Mevcut Galeri Resimlerini Backend'den Çek
     try {
       const res = await fetch(`${API_URL}/api/get-edit-details/${type}/${id}`);
       const data = await res.json();
@@ -172,7 +171,7 @@ export default function DashboardScreen() {
   const pickGalleryImages = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({ 
       mediaTypes: ImagePicker.MediaTypeOptions.Images, 
-      allowsMultipleSelection: true, // Birden fazla resim seçimi
+      allowsMultipleSelection: true, 
       quality: 0.8 
     });
     if (!result.canceled) {
@@ -182,8 +181,8 @@ export default function DashboardScreen() {
 
   // Galeri Yönetimi Silme İşlemleri
   const removeExistingGalleryImage = (imageID) => {
-    setDeletedGalleryIDs([...deletedGalleryIDs, imageID]); // Backend'e silinecekleri bildir
-    setEditGalleryImages(editGalleryImages.filter(img => img.imageID !== imageID)); // Ekranda anında gizle
+    setDeletedGalleryIDs([...deletedGalleryIDs, imageID]);
+    setEditGalleryImages(editGalleryImages.filter(img => img.imageID !== imageID));
   };
 
   const removeNewGalleryImage = (index) => {
@@ -203,10 +202,8 @@ export default function DashboardScreen() {
       formData.append('description', editDesc);
       formData.append('price', editPrice);
 
-      // Silinen Mevcut Galeri İD'lerini JSON string olarak gönder
       formData.append('deletedImageIDs', JSON.stringify(deletedGalleryIDs));
 
-      // Kapak Resmi
       if (editCoverImage) {
         const localUri = editCoverImage.uri;
         const filename = localUri.split('/').pop() || 'cover.jpg';
@@ -214,7 +211,6 @@ export default function DashboardScreen() {
         formData.append('coverImage', { uri: localUri, name: filename, type });
       }
 
-      // Yeni Galeri Resimleri (Birden fazla)
       newGalleryImages.forEach((img, index) => {
         const localUri = img.uri;
         const filename = localUri.split('/').pop() || `gallery_${index}.jpg`;
@@ -228,7 +224,7 @@ export default function DashboardScreen() {
 
       const data = await response.json();
       if (data.status === 'Success') {
-        Alert.alert('Başarılı', 'Tüm değişiklikler (galeri dahil) kaydedildi!');
+        Alert.alert('Başarılı', 'Tüm değişiklikler kaydedildi!');
         setEditModalVisible(false);
         fetchDashboardData();
       } else { Alert.alert('Hata', 'Kaydedilemedi.'); }
@@ -236,14 +232,25 @@ export default function DashboardScreen() {
     finally { setIsSaving(false); }
   };
 
-  // Hesaplamalar
+  // ==========================================
+  // HESAPLAMALAR VE ÇİZİM (RENDER) ÖNCESİ
+  // ==========================================
   const safeSales = Array.isArray(sales) ? sales : [];
   const totalDownloads = safeSales.length;
   const totalRevenue = safeSales.reduce((sum, sale) => sum + (sale.price || 0), 0);
   const getInitial = (name) => name ? name.charAt(0).toUpperCase() : '?';
 
-  if (loading) return <SafeAreaView style={[styles.safe, styles.center]}><ActivityIndicator size="large" color={COLORS.accentColor} /></SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]}>
+        <ActivityIndicator size="large" color={COLORS.accentColor} />
+      </SafeAreaView>
+    );
+  }
 
+  // ==========================================
+  // EKRAN TASARIMI (RETURN BLOĞU)
+  // ==========================================
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -254,11 +261,28 @@ export default function DashboardScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Üst Kısım İstatistikleri */}
+        {/* DOĞRU YERLEŞTİRİLMİŞ PROFİL KARTI VE BUTONLAR */}
         <View style={styles.profileCard}>
           <View style={styles.avatarCircle}><Text style={styles.avatarText}>{getInitial(user?.userName)}</Text></View>
           <Text style={styles.userName}>{user?.userName}</Text>
           <Text style={styles.userRole}>Geliştirici Hesabı</Text>
+          
+          {/* Eklenecek Yeni Butonlar */}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' }}>
+            <TouchableOpacity 
+              style={{ flex: 1, backgroundColor: 'rgba(233,69,96,0.15)', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: COLORS.accentColor, alignItems: 'center' }}
+              onPress={() => router.push({ pathname: '/publish', params: { type: 'Game' } })}
+            >
+              <Text style={{ color: COLORS.accentColor, fontWeight: 'bold', fontSize: 12 }}>+ Oyun Yükle</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={{ flex: 1, backgroundColor: 'rgba(91,91,254,0.15)', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: '#5b5bfe', alignItems: 'center' }}
+              onPress={() => router.push({ pathname: '/publish', params: { type: 'Asset' } })}
+            >
+              <Text style={{ color: '#5b5bfe', fontWeight: 'bold', fontSize: 12 }}>+ Asset Yükle</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>Genel Performans</Text>
@@ -267,7 +291,6 @@ export default function DashboardScreen() {
           <View style={styles.statBox}><Text style={styles.statIcon}>💰</Text><Text style={styles.statValue}>₺{totalRevenue.toFixed(2)}</Text><Text style={styles.statLabel}>Toplam Kazanç</Text></View>
         </View>
 
-        {/* Tablar */}
         <View style={styles.tabContainer}>
           <TouchableOpacity style={[styles.tabBtn, activeTab === 'games' && styles.tabBtnActive]} onPress={() => setActiveTab('games')}><Text style={[styles.tabText, activeTab === 'games' && styles.tabTextActive]}>Oyunlarım ({myGames.length})</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.tabBtn, activeTab === 'assets' && styles.tabBtnActive]} onPress={() => setActiveTab('assets')}><Text style={[styles.tabText, activeTab === 'assets' && styles.tabTextActive]}>Assetlerim ({myAssets.length})</Text></TouchableOpacity>
@@ -293,7 +316,6 @@ export default function DashboardScreen() {
                 <Text style={styles.itemPrice}>{price === 0 || !price ? 'Ücretsiz' : `₺${price}`}</Text>
               </View>
               
-              {/* BUTONLAR - 1. SATIR */}
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#5b5bfe' }]} onPress={() => openEditModal(type, item)}>
                   <Text style={styles.actionBtnText}>✏️ Düzenle</Text>
@@ -303,17 +325,15 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
               
-              {/* BUTONLAR - 2. SATIR */}
               <View style={styles.actionRow}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4caf50' }]} onPress={() => router.push({ pathname: '/detail', params: { id: id, type: type } })}>
-                        <Text style={styles.actionBtnText}>👁️ Sayfayı Gör</Text>
-                    </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4caf50' }]} onPress={() => router.push({ pathname: '/detail', params: { id: id, type: type } })}>
+                  <Text style={styles.actionBtnText}>👁️ Sayfayı Gör</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#f39c12' }]} onPress={() => openStatsModal(type, item)}>
                   <Text style={styles.actionBtnText}>📊 Detay & Grafik</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* BUTONLAR - 3. SATIR (YORUMLAR) */}
               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#9b59b6', width: '100%' }]} onPress={() => openCommentsModal(type, item)}>
                   <Text style={styles.actionBtnText}>💬 Yorumları Gör</Text>
               </TouchableOpacity>
@@ -323,9 +343,7 @@ export default function DashboardScreen() {
         <View style={{ height: 50 }} />
       </ScrollView>
 
-      {/* =========================================
-          YORUMLAR MODALI
-      ========================================= */}
+      {/* MODALLAR */}
       <Modal visible={commentsModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -346,9 +364,6 @@ export default function DashboardScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* =========================================
-          GRAFİK VE İNDİRME MODALI 
-      ========================================= */}
       <Modal visible={statsModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -378,9 +393,6 @@ export default function DashboardScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* =========================================
-          DÜZENLEME MODALI (GELİŞMİŞ GALERİ)
-      ========================================= */}
       <Modal visible={editModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -398,7 +410,6 @@ export default function DashboardScreen() {
             <Text style={styles.label}>Fiyat (₺)</Text>
             <TextInput style={styles.input} value={editPrice} onChangeText={setEditPrice} keyboardType="numeric"/>
 
-            {/* KAPAK GÖRSELİ */}
             <Text style={styles.label}>Kapak Görseli</Text>
             <TouchableOpacity style={styles.imagePickerBtn} onPress={pickCoverImage}>
               {editCoverImage ? (
@@ -408,7 +419,6 @@ export default function DashboardScreen() {
               )}
             </TouchableOpacity>
 
-            {/* MEVCUT GALERİ RESİMLERİ */}
             {editGalleryImages.length > 0 && (
               <>
                 <Text style={styles.label}>Galeri Görselleri (Mevcut)</Text>
@@ -425,7 +435,6 @@ export default function DashboardScreen() {
               </>
             )}
 
-            {/* YENİ EKLENEN RESİMLER */}
             {newGalleryImages.length > 0 && (
               <>
                 <Text style={styles.label}>Yeni Eklenecekler</Text>
@@ -442,7 +451,6 @@ export default function DashboardScreen() {
               </>
             )}
 
-            {/* YENİ RESİM EKLE BUTONU */}
             <Text style={styles.label}>Yeni Görsel Ekle</Text>
             <TouchableOpacity style={styles.addGalleryBtn} onPress={pickGalleryImages}>
               <Text style={styles.addGalleryBtnText}>+ Yeni Resimler Ekle</Text>
