@@ -13,8 +13,13 @@ import { COLORS, SPACING, RADIUS, FONTS } from '../constants/theme';
 
 const API_URL = 'http://localhost:3001';
 
+// LOKAL LOGOMUZU İÇE AKTARIYORUZ
+// Not: Ekran görüntüsü aldığın logonun adının "placeholder.png" ve 
+// yerinin "assets/images/" klasörü içinde olduğundan emin ol.
+const PLACEHOLDER_IMAGE = require('../assets/images/sheriffGamesLogo.png');
+
 export default function DetailScreen() {
-  const { id, type } = useLocalSearchParams(); // Önceki sayfadan gelen ID ve Type
+  const { id, type } = useLocalSearchParams(); 
   
   const [user, setUser] = useState(null);
   const [item, setItem] = useState(null);
@@ -24,6 +29,9 @@ export default function DetailScreen() {
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
   const [commenting, setCommenting] = useState(false);
+  
+  // KAPAK RESMİ HATA TAKİBİ
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -66,9 +74,6 @@ export default function DetailScreen() {
     }
   };
 
-  // ==========================================
-  // SATIN ALMA İŞLEMİ
-  // ==========================================
   const handleBuy = async () => {
     if (!user) {
       Alert.alert('Giriş Gerekli', 'Satın almak için giriş yapmalısınız.', [
@@ -83,8 +88,8 @@ export default function DetailScreen() {
       const endpoint = type === 'Game' ? '/api/buy-game' : '/api/buy-asset';
       const payload = {
         userID: user.userID,
-        price: item.price || 0, // Eğer fiyat boşsa 0 gönder
-        ...(type === 'Game' ? { gameID: id } : { assetID: id }) // URL'den gelen kesin ID'yi kullan
+        price: item.price || 0,
+        ...(type === 'Game' ? { gameID: id } : { assetID: id }) 
       };
 
       const res = await fetch(`${API_URL}${endpoint}`, {
@@ -97,11 +102,10 @@ export default function DetailScreen() {
       if (res.ok && data.status === 'Success') {
         Alert.alert('🎉 Başarılı!', `${item.title} kütüphanenize eklendi. Panelinizden görebilirsiniz.`);
       } else {
-        // Eğer veritabanında Duplicate Entry (Çift Kayıt) hatası dönerse
         if (data.message && data.message.includes('ER_DUP_ENTRY')) {
           Alert.alert('Zaten Sahipsiniz', 'Bu içerik zaten kütüphanenizde mevcut.');
         } else {
-          Alert.alert('Satın Alma Başarısız', data.message || data.sqlMessage || 'Bilinmeyen bir SQL hatası.');
+          Alert.alert('Satın Alma Başarısız', data.message || data.sqlMessage || 'Bilinmeyen bir hata.');
         }
       }
     } catch (err) {
@@ -111,9 +115,6 @@ export default function DetailScreen() {
     }
   };
 
-  // ==========================================
-  // YORUM YAPMA İŞLEMİ
-  // ==========================================
   const handleAddComment = async () => {
     if (!user) {
       Alert.alert('Bilgi', 'Yorum yapmak için giriş yapmalısınız.');
@@ -127,7 +128,7 @@ export default function DetailScreen() {
       const payload = {
         userID: user.userID,
         commentText: newComment,
-        ...(type === 'Game' ? { gameID: id } : { assetID: id }) // URL'den gelen kesin ID'yi kullan
+        ...(type === 'Game' ? { gameID: id } : { assetID: id }) 
       };
 
       const res = await fetch(`${API_URL}${endpoint}`, {
@@ -138,12 +139,11 @@ export default function DetailScreen() {
       
       const data = await res.json();
 
-      // İşlem başarılıysa veya HTTP kodu 200 ise
       if (res.ok && (data.status === 'Success' || data.message === 'Yorum eklendi')) {
-        setNewComment(''); // Kutuyu temizle
-        fetchData(); // Yorum eklendikten sonra listeyi yenile
+        setNewComment(''); 
+        fetchData(); 
       } else {
-        Alert.alert('Yorum Gönderilemedi', data.sqlMessage || data.message || JSON.stringify(data));
+        Alert.alert('Yorum Gönderilemedi', data.sqlMessage || data.message || 'Bilinmeyen hata');
       }
     } catch (err) {
       Alert.alert('Bağlantı Hatası', 'Yorumunuz iletilemedi.');
@@ -162,7 +162,6 @@ export default function DetailScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Text style={styles.backBtnText}>{'< Geri'}</Text></TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{item.title}</Text>
@@ -170,10 +169,16 @@ export default function DetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* KAPAK FOTOĞRAFI */}
+        
+        {/* KAPAK FOTOĞRAFI (GÜNCELLENMİŞ HATA KONTROLLÜ YAPI) */}
         <Image 
-          source={{ uri: item.cover ? `${API_URL}/uploads/${item.cover}` : 'https://via.placeholder.com/800x500' }} 
+          source={
+            (!item.cover || imgError) 
+              ? PLACEHOLDER_IMAGE 
+              : { uri: `${API_URL}/uploads/${item.cover}` }
+          } 
           style={styles.coverImage} 
+          onError={() => setImgError(true)}
         />
 
         <View style={styles.content}>
@@ -211,7 +216,6 @@ export default function DetailScreen() {
 
           <Text style={[styles.sectionTitle, { marginTop: SPACING.xl }]}>Yorumlar ({comments.length})</Text>
           
-          {/* YORUM YAPMA KUTUSU */}
           <View style={styles.commentInputContainer}>
             <TextInput
               style={styles.commentInput}
@@ -231,7 +235,6 @@ export default function DetailScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* YORUMLAR LİSTESİ */}
           {comments.length > 0 ? comments.map((comment, idx) => (
             <View key={idx} style={styles.commentCard}>
               <View style={styles.commentHeader}>
@@ -246,7 +249,6 @@ export default function DetailScreen() {
         </View>
       </ScrollView>
 
-      {/* SABİT SATIN AL BUTONU */}
       <View style={styles.buyFooter}>
         <View style={styles.buyInfo}>
           <Text style={styles.buyTitle}>{item.title}</Text>
