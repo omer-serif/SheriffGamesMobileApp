@@ -1,7 +1,3 @@
-// =============================================
-// SHERIFF GAMES - GELİŞMİŞ PANELİM (DASHBOARD)
-// =============================================
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
@@ -46,12 +42,11 @@ export default function DashboardScreen() {
   const [editCoverImage, setEditCoverImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- YENİ EKLENEN GALERİ STATE'LERİ ---
   const [editGalleryImages, setEditGalleryImages] = useState([]); 
   const [newGalleryImages, setNewGalleryImages] = useState([]); 
   const [deletedGalleryIDs, setDeletedGalleryIDs] = useState([]);
 
-  // 1. ANA VERİLERİ ÇEK
+  // ANA VERİLERİ ÇEK
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
@@ -79,7 +74,7 @@ export default function DashboardScreen() {
 
   useFocusEffect(useCallback(() => { fetchDashboardData(); }, []));
 
-  // 2. SİLME İŞLEMİ
+  // SİLME İŞLEMİ
   const handleDelete = (type, id, name) => {
     Alert.alert("Emin misin?", `${name} kalıcı olarak silinecek.`, [
       { text: "İptal", style: "cancel" },
@@ -97,7 +92,7 @@ export default function DashboardScreen() {
     ]);
   };
 
-  // 3. GRAFİK MODALI
+  // GRAFİK MODALI
   const openStatsModal = async (type, item) => {
     const id = type === 'Game' ? item.gamesID : item.assetID;
     const name = type === 'Game' ? item.gameName : item.assetName;
@@ -122,7 +117,7 @@ export default function DashboardScreen() {
     } catch (err) { Alert.alert('Hata', 'Veri alınamadı.'); }
   };
 
-  // 4. YORUMLAR MODALI
+  // YORUMLAR MODALI
   const openCommentsModal = async (type, item) => {
     const id = type === 'Game' ? item.gamesID : item.assetID;
     const name = type === 'Game' ? item.gameName : item.assetName;
@@ -138,7 +133,7 @@ export default function DashboardScreen() {
     } catch(err) { Alert.alert('Hata', 'Yorumlar alınamadı.'); }
   };
 
-  // 5. DÜZENLEME MODALINI AÇ VE GALERİ DETAYLARINI ÇEK
+  // DÜZENLEME MODALINI AÇ VE GALERİ DETAYLARINI ÇEK
   const openEditModal = async (type, item) => {
     const id = type === 'Game' ? item.gamesID : item.assetID;
     setEditType(type);
@@ -232,9 +227,6 @@ export default function DashboardScreen() {
     finally { setIsSaving(false); }
   };
 
-  // ==========================================
-  // HESAPLAMALAR VE ÇİZİM (RENDER) ÖNCESİ
-  // ==========================================
   const safeSales = Array.isArray(sales) ? sales : [];
   const totalDownloads = safeSales.length;
   const totalRevenue = safeSales.reduce((sum, sale) => sum + (sale.price || 0), 0);
@@ -248,9 +240,6 @@ export default function DashboardScreen() {
     );
   }
 
-  // ==========================================
-  // EKRAN TASARIMI (RETURN BLOĞU)
-  // ==========================================
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -469,9 +458,7 @@ export default function DashboardScreen() {
   );
 }
 
-// =============================================
 // STİLLER
-// =============================================
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bgColor },
   center: { justifyContent: 'center', alignItems: 'center' },

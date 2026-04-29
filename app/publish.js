@@ -1,7 +1,3 @@
-// =============================================
-// SHERIFF GAMES - İÇERİK YAYIMLAMA SAYFASI
-// =============================================
-
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput,
@@ -21,11 +17,11 @@ export default function PublishScreen() {
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState([]); // Veritabanından gelecek türler
+  const [categories, setCategories] = useState([]); 
 
   // Form State'leri
   const [name, setName] = useState('');
-  const [shortDesc, setShortDesc] = useState(''); // Sadece Oyun için
+  const [shortDesc, setShortDesc] = useState(''); 
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState('');
   const [selectedCats, setSelectedCats] = useState([]);
@@ -45,7 +41,7 @@ export default function PublishScreen() {
       }
       setUser(JSON.parse(userData));
 
-      // Türleri/Kategorileri Çek
+      
       try {
         const endpoint = isGame ? '/game-types' : '/asset-types';
         const res = await fetch(`${API_URL}${endpoint}`);
@@ -58,7 +54,7 @@ export default function PublishScreen() {
     init();
   }, [type]);
 
-  // Seçim İşlemleri
+
   const toggleCategory = (id) => {
     if (selectedCats.includes(id)) {
       setSelectedCats(selectedCats.filter(catId => catId !== id));
@@ -114,12 +110,10 @@ export default function PublishScreen() {
       const coverName = coverUri.split('/').pop() || 'cover.jpg';
       formData.append('coverImage', { uri: coverUri, name: coverName, type: `image/${coverName.split('.').pop()}` });
 
-      // Ana Dosya (.zip, .exe vb)
       const fileUri = mainFile.uri;
       const fileName = mainFile.name || 'file.zip';
       formData.append(isGame ? 'gameFile' : 'assetFile', { uri: fileUri, name: fileName, type: mainFile.mimeType || 'application/zip' });
 
-      // Galeri Resimleri
       galleryImages.forEach((img, idx) => {
         const gUri = img.uri;
         const gName = gUri.split('/').pop() || `gallery_${idx}.jpg`;
@@ -157,7 +151,6 @@ export default function PublishScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* ================= 1. BÖLÜM ================= */}
         <Text style={styles.sectionTitle}>1. {isGame ? 'Temel Tanıtım' : 'Asset Bilgileri'}</Text>
         
         <Text style={styles.label}>{isGame ? 'Oyun Adı *' : 'Asset Adı *'}</Text>
@@ -172,8 +165,6 @@ export default function PublishScreen() {
 
         <Text style={styles.label}>{isGame ? 'Detaylı Açıklama *' : 'Açıklama *'}</Text>
         <TextInput style={[styles.input, { height: 120 }]} value={desc} onChangeText={setDesc} multiline textAlignVertical="top" />
-
-        {/* ================= 2. BÖLÜM ================= */}
         <Text style={styles.sectionTitle}>2. Görseller ve Dosyalar</Text>
         
         <Text style={styles.label}>Kapak Görseli (Zorunlu) *</Text>
@@ -186,7 +177,6 @@ export default function PublishScreen() {
           <Text style={styles.filePickerText}>📸 Galeri Görselleri Seç</Text>
         </TouchableOpacity>
         
-        {/* Seçilen Galeri Görselleri Önizleme */}
         {galleryImages.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
             {galleryImages.map((img, index) => (
@@ -207,7 +197,6 @@ export default function PublishScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* ================= 3. BÖLÜM ================= */}
         <Text style={styles.sectionTitle}>3. {isGame ? 'Sınıflandırma ve Fiyatlandırma' : 'Tür ve Fiyat'}</Text>
 
         <Text style={styles.label}>{isGame ? 'Kategoriler *' : 'Asset Türleri * (Çoklu Seçim)'}</Text>
@@ -230,7 +219,6 @@ export default function PublishScreen() {
         <Text style={styles.label}>Fiyatlandırma (₺) (Ücretsiz ise 0 yazın)</Text>
         <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="Örn: 50" placeholderTextColor={COLORS.mutedText} />
 
-        {/* YAYIMLA BUTONU */}
         <TouchableOpacity style={styles.publishBtn} onPress={handlePublish} disabled={loading}>
           {loading ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.publishBtnText}>{isGame ? 'OYUNU YAYIMLA' : 'ASSETİ YAYIMLA'}</Text>}
         </TouchableOpacity>
@@ -241,9 +229,6 @@ export default function PublishScreen() {
   );
 }
 
-// =============================================
-// STİLLER
-// =============================================
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bgColor },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SPACING.lg, backgroundColor: COLORS.navbarBg, borderBottomWidth: 1, borderBottomColor: '#333' },

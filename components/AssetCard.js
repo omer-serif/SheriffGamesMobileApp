@@ -1,7 +1,3 @@
-// =============================================
-// SHERIFF GAMES - ASSET KARTI BİLEŞENİ
-// =============================================
-
 import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { COLORS, SPACING, RADIUS, FONTS } from '../constants/theme';
@@ -23,7 +19,7 @@ export function AssetCard({ asset, onPress }) {
               resizeMode: 'contain', 
               width: '60%', 
               height: '60%', 
-              opacity: 0.8 // Ne çok parlak ne de karanlıkta kayboluyor
+              opacity: 0.8 
             }
           ]}
           onError={() => setImgError(true)} 
@@ -51,7 +47,7 @@ const styles = StyleSheet.create({
   imageContainer: { 
     width: '100%', 
     height: 100, 
-    backgroundColor: '#161625', // Temanın kendi lacivert/koyu gri tonuna döndük
+    backgroundColor: '#161625',
     justifyContent: 'center', 
     alignItems: 'center' 
   },

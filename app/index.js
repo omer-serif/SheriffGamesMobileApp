@@ -1,7 +1,3 @@
-// =============================================
-// SHERIFF GAMES - ANA SAYFA (GAMES & ASSETS)
-// =============================================
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, ActivityIndicator,
@@ -103,7 +99,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* KATEGORİ NAVİGASYONU */}
       <View style={styles.subNavbar}>
         <TouchableOpacity 
           style={[styles.navLink, viewMode === 'games' && styles.navLinkActive]} 
@@ -120,10 +115,7 @@ export default function HomeScreen() {
       </View>
 
       {viewMode === 'home' ? (
-        /* KEŞFET (HOME) GÖRÜNÜMÜ - YENİLENMİŞ VİTRİN */
         <ScrollView style={styles.homeScroll} showsVerticalScrollIndicator={false}>
-          
-          {/* BÜYÜTÜLMÜŞ POPÜLER OYUNLAR */}
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>🔥 Popüler Oyunlar</Text></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={{ paddingHorizontal: SPACING.xl }}>
             {games.slice(0, 5).map(game => (
@@ -139,8 +131,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-
-          {/* BÜYÜTÜLMÜŞ POPÜLER ASSETLER */}
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>🎨 Trend Assetler</Text></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={{ paddingHorizontal: SPACING.xl }}>
             {assets.slice(0, 5).map(asset => (
@@ -156,8 +146,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-
-          {/* YENİ EKLENEN BÖLÜM: DİKEY LİSTE */}
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>🚀 Yeni Eklenenler</Text></View>
           <View style={styles.verticalListContainer}>
             {newArrivals.map(game => (

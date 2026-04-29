@@ -1,7 +1,3 @@
-// =============================================
-// SHERIFF GAMES - GİRİŞ YAP SAYFASI
-// =============================================
-
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
@@ -34,11 +30,10 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (data.status === 'Success') {
-        // KULLANICIYI TELEFONUN HAFIZASINA KAYDET
         await AsyncStorage.setItem('user', JSON.stringify(data.user));
         
         Alert.alert('Başarılı', `Hoş geldin, ${data.user.userName}!`);
-        router.replace('/'); // Ana sayfaya yönlendir
+        router.replace('/'); 
       } else {
         Alert.alert('Hata', data.message || 'Kullanıcı adı veya şifre hatalı.');
       }

@@ -1,7 +1,3 @@
-// =============================================
-// SHERIFF GAMES - ÜRÜN DETAY SAYFASI
-// =============================================
-
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, Image,
@@ -12,10 +8,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADIUS, FONTS } from '../constants/theme';
 
 const API_URL = 'http://localhost:3001';
-
-// LOKAL LOGOMUZU İÇE AKTARIYORUZ
-// Not: Ekran görüntüsü aldığın logonun adının "placeholder.png" ve 
-// yerinin "assets/images/" klasörü içinde olduğundan emin ol.
 const PLACEHOLDER_IMAGE = require('../assets/images/sheriffGamesLogo.png');
 
 export default function DetailScreen() {
@@ -169,8 +161,6 @@ export default function DetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        
-        {/* KAPAK FOTOĞRAFI (GÜNCELLENMİŞ HATA KONTROLLÜ YAPI) */}
         <Image 
           source={
             (!item.cover || imgError) 

@@ -6,14 +6,11 @@ import { COLORS } from '../constants/theme';
 export default function RootLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bgColor }}>
-      {/* Tüm uygulama genelinde saat/şarj göstergelerini beyaz yapar */}
       <StatusBar style="light" />
-      
-      {/* Sayfaların yönetim sistemi */}
       <Stack
         screenOptions={{
-          headerShown: false, // Expo'nun varsayılan beyaz başlığını gizler
-          contentStyle: { backgroundColor: COLORS.bgColor }, // En arka planı koyu yapar
+          headerShown: false, 
+          contentStyle: { backgroundColor: COLORS.bgColor },    
         }}
       />
     </View>

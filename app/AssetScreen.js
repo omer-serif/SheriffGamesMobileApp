@@ -1,6 +1,3 @@
-// =============================================
-// SHERIFF GAMES - ASSETLER SAYFASI - VERİTABANI BAĞLANTILI
-// =============================================
 
 import React, { useState, useEffect } from 'react';
 import {
