@@ -1,29 +1,19 @@
 {
   "expo": {
-    "name": "SherifGamesMobile",
-    "slug": "SherifGamesMobile",
+    "name": "SheriffGamesMobile",
+    "slug": "SheriffGamesMobile",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "scheme": "sheriff-games",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.omerserif.sheriffgames"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1a1a2e"
       },
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "package": "com.omerserif.sheriffgames"
     }
   }
 }
