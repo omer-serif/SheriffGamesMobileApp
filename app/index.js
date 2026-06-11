@@ -16,10 +16,10 @@ const ASSET_TYPES = ['Tümü', 'Karakter', 'UI', 'Ses', 'Çevre', 'Animasyon'];
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const [viewMode, setViewMode] = useState('home'); 
+  const [viewMode, setViewMode] = useState('home');
   const [search, setSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('Tümü');
-  
+
   const [games, setGames] = useState([]);
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +43,7 @@ export default function HomeScreen() {
           fetch(`${API_URL}/games`),
           fetch(`${API_URL}/assets`)
         ]);
-        
+
         const gData = await gRes.json();
         const aData = await aRes.json();
 
@@ -68,7 +68,7 @@ export default function HomeScreen() {
     setUser(null);
   };
 
-  const filteredData = viewMode === 'games' 
+  const filteredData = viewMode === 'games'
     ? games.filter(g => g.title.toLowerCase().includes(search.toLowerCase()) && (selectedFilter === 'Tümü' || g.genre.includes(selectedFilter)))
     : assets.filter(a => a.title.toLowerCase().includes(search.toLowerCase()) && (selectedFilter === 'Tümü' || a.type === selectedFilter));
 
@@ -88,26 +88,35 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => setViewMode('home')}>
           <Text style={styles.logo}>SHERIFF</Text>
         </TouchableOpacity>
-        
+
         {user ? (
           <View style={styles.navActions}>
-            <TouchableOpacity style={styles.panelBtn} onPress={() => router.push('/dashboard')}><Text style={styles.btnText}>PANELİM</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}><Text style={styles.btnText}>ÇIKIŞ</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.panelBtn} onPress={() => router.push('/library')}>
+              <Text style={styles.btnText}>KÜTÜPHANEM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.panelBtn} onPress={() => router.push('/dashboard')}>
+              <Text style={styles.btnText}>PANELİM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Text style={styles.btnText}>ÇIKIŞ</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}><Text style={styles.loginBtnText}>GİRİŞ</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
+            <Text style={styles.loginBtnText}>GİRİŞ</Text>
+          </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.subNavbar}>
-        <TouchableOpacity 
-          style={[styles.navLink, viewMode === 'games' && styles.navLinkActive]} 
+        <TouchableOpacity
+          style={[styles.navLink, viewMode === 'games' && styles.navLinkActive]}
           onPress={() => { setViewMode('games'); setSelectedFilter('Tümü'); }}
         >
           <Text style={[styles.navLinkText, viewMode === 'games' && styles.navLinkTextActive]}>OYUNLAR</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.navLink, viewMode === 'assets' && styles.navLinkActive]} 
+        <TouchableOpacity
+          style={[styles.navLink, viewMode === 'assets' && styles.navLinkActive]}
           onPress={() => { setViewMode('assets'); setSelectedFilter('Tümü'); }}
         >
           <Text style={[styles.navLinkText, viewMode === 'assets' && styles.navLinkTextActive]}>ASSETLER</Text>
@@ -159,7 +168,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          
+
           <View style={{ height: 100 }} />
         </ScrollView>
       ) : (
@@ -171,7 +180,7 @@ export default function HomeScreen() {
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listPadding}
           renderItem={({ item }) => (
-            viewMode === 'games' 
+            viewMode === 'games'
               ? <GameCard game={item} onPress={() => router.push({ pathname: '/detail', params: { id: item.id, type: 'Game' } })} />
               : <AssetCard asset={item} onPress={() => router.push({ pathname: '/detail', params: { id: item.id, type: 'Asset' } })} />
           )}
@@ -198,7 +207,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bgColor },
   center: { justifyContent: 'center', alignItems: 'center' },
-  
+
   navbar: { backgroundColor: COLORS.navbarBg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.lg, borderBottomWidth: 1, borderColor: '#333' },
   logo: { color: COLORS.accentColor, fontSize: 20, fontWeight: 'bold', letterSpacing: 2 },
   navActions: { flexDirection: 'row', gap: 8 },
@@ -219,7 +228,7 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.md, marginTop: SPACING.md },
   sectionTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   horizontalScroll: { marginBottom: SPACING.xxl },
-  
+
   // Büyük Vitrin Kartları
   largeCard: { width: width * 0.75, marginRight: SPACING.lg, backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, overflow: 'hidden', borderWidth: 1, borderColor: '#333' },
   largeCardImage: { width: '100%', height: 160, resizeMode: 'cover' },

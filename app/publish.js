@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Image, Alert
+  TouchableOpacity, ActivityIndicator, Image, Alert, Switch
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { COLORS, SPACING, RADIUS, FONTS } from '../constants/theme';
+
 
 const API_URL = 'http://localhost:3001';
 
@@ -17,14 +18,16 @@ export default function PublishScreen() {
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState([]); 
+  const [categories, setCategories] = useState([]);
 
   // Form State'leri
   const [name, setName] = useState('');
-  const [shortDesc, setShortDesc] = useState(''); 
+  const [shortDesc, setShortDesc] = useState('');
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState('');
   const [selectedCats, setSelectedCats] = useState([]);
+
+  const [isTestGame, setIsTestGame] = useState(false);
 
   // Dosya State'leri
   const [coverImage, setCoverImage] = useState(null);
@@ -41,7 +44,7 @@ export default function PublishScreen() {
       }
       setUser(JSON.parse(userData));
 
-      
+
       try {
         const endpoint = isGame ? '/game-types' : '/asset-types';
         const res = await fetch(`${API_URL}${endpoint}`);
@@ -96,7 +99,7 @@ export default function PublishScreen() {
     setLoading(true);
     try {
       const formData = new FormData();
-      
+
       // Metin alanları
       const finalDesc = isGame && shortDesc ? `${shortDesc}\n\n${desc}` : desc; // Kısa açıklamayı birleştir
       formData.append('userID', user.userID);
@@ -104,6 +107,7 @@ export default function PublishScreen() {
       formData.append(isGame ? 'gameDescription' : 'assetDescription', finalDesc);
       formData.append(isGame ? 'gamePrice' : 'assetPrice', price || 0);
       formData.append(isGame ? 'gameTypes' : 'assetTypes', JSON.stringify(selectedCats));
+      formData.append('isTestGame', isTestGame ? 'true' : 'false');
 
       // Kapak Resmi
       const coverUri = coverImage.uri;
@@ -150,9 +154,9 @@ export default function PublishScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         <Text style={styles.sectionTitle}>1. {isGame ? 'Temel Tanıtım' : 'Asset Bilgileri'}</Text>
-        
+
         <Text style={styles.label}>{isGame ? 'Oyun Adı *' : 'Asset Adı *'}</Text>
         <TextInput style={styles.input} value={name} onChangeText={setName} />
 
@@ -163,10 +167,39 @@ export default function PublishScreen() {
           </>
         )}
 
+        {type === 'Game' && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)', // Diğer inputlarla uyumlu karanlık saydam arkaplan
+            padding: SPACING,
+            borderRadius: RADIUS,
+            marginVertical: SPACING,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+          }}>
+            <View style={{ flex: 1, paddingRight: 15 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: COLORS.white, marginBottom: 4 }}>
+                Test Programı
+              </Text>
+              <Text style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.6)' }}>
+                Bu oyunu geliştirici test sürecine dahil etmek istiyorum.
+              </Text>
+            </View>
+            <Switch
+              value={isTestGame}
+              onValueChange={setIsTestGame}
+              trackColor={{ false: "rgba(255, 255, 255, 0.2)", true: COLORS.primary }}
+              thumbColor={isTestGame ? COLORS.white : "#f4f3f4"}
+            />
+          </View>
+        )}
+
         <Text style={styles.label}>{isGame ? 'Detaylı Açıklama *' : 'Açıklama *'}</Text>
         <TextInput style={[styles.input, { height: 120 }]} value={desc} onChangeText={setDesc} multiline textAlignVertical="top" />
         <Text style={styles.sectionTitle}>2. Görseller ve Dosyalar</Text>
-        
+
         <Text style={styles.label}>Kapak Görseli (Zorunlu) *</Text>
         <TouchableOpacity style={styles.filePickerBtn} onPress={pickCover}>
           {coverImage ? <Image source={{ uri: coverImage.uri }} style={styles.previewImage} /> : <Text style={styles.filePickerText}>🖼️ Kapak Resmi Seç</Text>}
@@ -176,7 +209,7 @@ export default function PublishScreen() {
         <TouchableOpacity style={styles.filePickerBtn} onPress={pickGallery}>
           <Text style={styles.filePickerText}>📸 Galeri Görselleri Seç</Text>
         </TouchableOpacity>
-        
+
         {galleryImages.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
             {galleryImages.map((img, index) => (
@@ -222,7 +255,7 @@ export default function PublishScreen() {
         <TouchableOpacity style={styles.publishBtn} onPress={handlePublish} disabled={loading}>
           {loading ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.publishBtnText}>{isGame ? 'OYUNU YAYIMLA' : 'ASSETİ YAYIMLA'}</Text>}
         </TouchableOpacity>
-        
+
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
@@ -237,10 +270,10 @@ const styles = StyleSheet.create({
   scrollContent: { padding: SPACING.xl },
 
   sectionTitle: { color: COLORS.accentColor, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginTop: SPACING.xl, marginBottom: SPACING.lg },
-  
+
   label: { color: COLORS.white, fontWeight: 'bold', fontSize: 13, marginBottom: SPACING.sm, marginTop: SPACING.md },
   input: { backgroundColor: COLORS.cardBg, color: COLORS.white, padding: SPACING.md, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444' },
-  
+
   filePickerBtn: { backgroundColor: COLORS.cardBg, padding: SPACING.lg, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', height: 80 },
   filePickerText: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm },
   previewImage: { width: '100%', height: '100%', resizeMode: 'cover', borderRadius: RADIUS.sm },

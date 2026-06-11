@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, ActivityIndicator, Image, Alert, Modal, TextInput, Dimensions
+  TouchableOpacity, ActivityIndicator, Image, Alert, Modal, TextInput, Dimensions, FlatList, Switch
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,9 +42,18 @@ export default function DashboardScreen() {
   const [editCoverImage, setEditCoverImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [editGalleryImages, setEditGalleryImages] = useState([]); 
-  const [newGalleryImages, setNewGalleryImages] = useState([]); 
+  const [editGalleryImages, setEditGalleryImages] = useState([]);
+  const [newGalleryImages, setNewGalleryImages] = useState([]);
   const [deletedGalleryIDs, setDeletedGalleryIDs] = useState([]);
+
+  // Test State'leri
+  const [testGames, setTestGames] = useState([]);
+  const [selectedTestGame, setSelectedTestGame] = useState(null);
+  const [testMedia, setTestMedia] = useState({ videos: [], images: [] });
+  const [mediaTab, setMediaTab] = useState('video'); // 'video' veya 'image'
+  const [mediaModalVisible, setMediaModalVisible] = useState(false);
+  const [testCenterVisible, setTestCenterVisible] = useState(false);
+  const [editIsTestGame, setEditIsTestGame] = useState(false);
 
   // ANA VERİLERİ ÇEK
   const fetchDashboardData = async () => {
@@ -56,15 +65,17 @@ export default function DashboardScreen() {
       setUser(currentUser);
 
       const userID = currentUser.userID;
-      const [gamesRes, assetsRes, salesRes] = await Promise.all([
+      const [gamesRes, assetsRes, salesRes, testGamesRes] = await Promise.all([
         fetch(`${API_URL}/api/my-games/${userID}`),
         fetch(`${API_URL}/api/my-assets/${userID}`),
-        fetch(`${API_URL}/api/my-sales/${userID}`)
+        fetch(`${API_URL}/api/my-sales/${userID}`),
+        fetch(`${API_URL}/api/my-test-games/${userID}`) // Test oyunları da paralel çekiliyor
       ]);
 
       setMyGames(await gamesRes.json());
       setMyAssets(await assetsRes.json());
       setSales(await salesRes.json());
+      setTestGames(await testGamesRes.json());
     } catch (error) {
       console.error(error);
     } finally {
@@ -74,20 +85,39 @@ export default function DashboardScreen() {
 
   useFocusEffect(useCallback(() => { fetchDashboardData(); }, []));
 
+  // TEST MEDYALARINI AÇ
+  const openTestMedia = async (game) => {
+    setSelectedTestGame(game);
+    setTestCenterVisible(false); // İlk modalı kapat
+    setTimeout(() => {
+      setMediaModalVisible(true); // Gecikmeli olarak medya modalını aç (Geçiş efekti için)
+      setMediaTab('video');
+    }, 400);
+
+    try {
+      const res = await fetch(`${API_URL}/api/test-media/${game.id}`);
+      const data = await res.json();
+      setTestMedia(data);
+    } catch (err) {
+      console.error("Medya çekilemedi", err);
+    }
+  };
+
   // SİLME İŞLEMİ
   const handleDelete = (type, id, name) => {
     Alert.alert("Emin misin?", `${name} kalıcı olarak silinecek.`, [
       { text: "İptal", style: "cancel" },
-      { text: "Sil", style: "destructive", onPress: async () => {
+      {
+        text: "Sil", style: "destructive", onPress: async () => {
           try {
             const res = await fetch(`${API_URL}/api/delete-item`, {
               method: 'DELETE', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ type, id })
             });
             const data = await res.json();
-            if(data.status === 'Success') { Alert.alert('Başarılı', 'Silindi.'); fetchDashboardData(); }
-          } catch(err) { Alert.alert('Hata', 'Silinemedi.'); }
-        } 
+            if (data.status === 'Success') { Alert.alert('Başarılı', 'Silindi.'); fetchDashboardData(); }
+          } catch (err) { Alert.alert('Hata', 'Silinemedi.'); }
+        }
       }
     ]);
   };
@@ -109,7 +139,7 @@ export default function DashboardScreen() {
         grouped[date] = (grouped[date] || 0) + 1;
       });
 
-      const labels = Object.keys(grouped).length > 0 ? Object.keys(grouped).map(d => d.substring(0,5)) : ['Veri Yok'];
+      const labels = Object.keys(grouped).length > 0 ? Object.keys(grouped).map(d => d.substring(0, 5)) : ['Veri Yok'];
       const counts = Object.values(grouped).length > 0 ? Object.values(grouped) : [0];
 
       setChartData({ labels, datasets: [{ data: counts }] });
@@ -130,31 +160,58 @@ export default function DashboardScreen() {
       const res = await fetch(`${API_URL}${endpoint}`);
       const data = await res.json();
       setItemComments(data);
-    } catch(err) { Alert.alert('Hata', 'Yorumlar alınamadı.'); }
+    } catch (err) { Alert.alert('Hata', 'Yorumlar alınamadı.'); }
   };
 
   // DÜZENLEME MODALINI AÇ VE GALERİ DETAYLARINI ÇEK
   const openEditModal = async (type, item) => {
     const id = type === 'Game' ? item.gamesID : item.assetID;
+    // Eğer oyun düzenleniyorsa, bu oyunun şu an test programında olup olmadığını kontrol et
+    if (type === 'Game') {
+      // testGames bir dizi değilse boş dizi [] olarak kabul et, çökmeyi engelle
+      const safeTestGames = Array.isArray(testGames) ? testGames : [];
+      // ID eşleşmesini hem id hem de gamesID ihtimaline karşı kontrol et
+      const isCurrentlyTest = safeTestGames.some(tg => (tg.id === id || tg.gamesID === id));
+      setEditIsTestGame(isCurrentlyTest);
+    } else {
+      setEditIsTestGame(false);
+    }
     setEditType(type);
     setEditId(id);
     setEditName(type === 'Game' ? item.gameName : item.assetName);
     setEditDesc(type === 'Game' ? item.gameDescription : item.assetDescription);
     setEditPrice((type === 'Game' ? item.gamePrice : item.assetPrice)?.toString() || '0');
-    setEditCoverImage(null); 
-    
+    setEditCoverImage(null);
+
     // Galeri state'lerini sıfırla
     setEditGalleryImages([]);
     setNewGalleryImages([]);
     setDeletedGalleryIDs([]);
-    
+
     setEditModalVisible(true);
 
     try {
       const res = await fetch(`${API_URL}/api/get-edit-details/${type}/${id}`);
       const data = await res.json();
-      if(data.galleryImages) setEditGalleryImages(data.galleryImages);
+      if (data.galleryImages) setEditGalleryImages(data.galleryImages);
     } catch (error) { console.error("Galeri çekilemedi", error); }
+  };
+
+  const handleTestGameToggle = (newValue) => {
+    if (!newValue) {
+      // true'dan false'a çekiliyorsa uyarı ver
+      Alert.alert(
+        "⚠️ Test Programından Çık",
+        "Oyunu test programından çıkarırsanız, oyuncuların gönderdiği tüm test videoları ve fotoğrafları kalıcı olarak silinecektir. Bu işlem geri alınamaz. Onaylıyor musunuz?",
+        [
+          { text: "İptal", style: "cancel", onPress: () => setEditIsTestGame(true) }, // Vazgeçerse switch'i geri true yap
+          { text: "Evet, Çıkar ve Sil", style: "destructive", onPress: () => setEditIsTestGame(false) }
+        ]
+      );
+    } else {
+      // false'tan true'ya çekiliyorsa direkt onayla
+      setEditIsTestGame(true);
+    }
   };
 
   // Resim Seçiciler
@@ -164,17 +221,16 @@ export default function DashboardScreen() {
   };
 
   const pickGalleryImages = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({ 
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, 
-      allowsMultipleSelection: true, 
-      quality: 0.8 
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8
     });
     if (!result.canceled) {
       setNewGalleryImages([...newGalleryImages, ...result.assets]);
     }
   };
 
-  // Galeri Yönetimi Silme İşlemleri
   const removeExistingGalleryImage = (imageID) => {
     setDeletedGalleryIDs([...deletedGalleryIDs, imageID]);
     setEditGalleryImages(editGalleryImages.filter(img => img.imageID !== imageID));
@@ -196,6 +252,9 @@ export default function DashboardScreen() {
       formData.append('name', editName);
       formData.append('description', editDesc);
       formData.append('price', editPrice);
+      if (editType === 'Game') {
+        formData.append('isTestGame', editIsTestGame ? 'true' : 'false');
+      }
 
       formData.append('deletedImageIDs', JSON.stringify(deletedGalleryIDs));
 
@@ -223,7 +282,7 @@ export default function DashboardScreen() {
         setEditModalVisible(false);
         fetchDashboardData();
       } else { Alert.alert('Hata', 'Kaydedilemedi.'); }
-    } catch (err) { Alert.alert('Hata', 'Sunucu bağlantı hatası.'); } 
+    } catch (err) { Alert.alert('Hata', 'Sunucu bağlantı hatası.'); }
     finally { setIsSaving(false); }
   };
 
@@ -249,23 +308,21 @@ export default function DashboardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* DOĞRU YERLEŞTİRİLMİŞ PROFİL KARTI VE BUTONLAR */}
+
         <View style={styles.profileCard}>
           <View style={styles.avatarCircle}><Text style={styles.avatarText}>{getInitial(user?.userName)}</Text></View>
           <Text style={styles.userName}>{user?.userName}</Text>
           <Text style={styles.userRole}>Geliştirici Hesabı</Text>
-          
-          {/* Eklenecek Yeni Butonlar */}
+
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ flex: 1, backgroundColor: 'rgba(233,69,96,0.15)', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: COLORS.accentColor, alignItems: 'center' }}
               onPress={() => router.push({ pathname: '/publish', params: { type: 'Game' } })}
             >
               <Text style={{ color: COLORS.accentColor, fontWeight: 'bold', fontSize: 12 }}>+ Oyun Yükle</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={{ flex: 1, backgroundColor: 'rgba(91,91,254,0.15)', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: '#5b5bfe', alignItems: 'center' }}
               onPress={() => router.push({ pathname: '/publish', params: { type: 'Asset' } })}
             >
@@ -273,6 +330,22 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* --- TEST MERKEZİ BUTONU --- */}
+        <TouchableOpacity
+          style={styles.testCenterBtn}
+          onPress={() => setTestCenterVisible(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 26, marginRight: 15 }}>🧪</Text>
+            <View>
+              <Text style={{ color: COLORS.white, fontSize: FONTS.sizes.md, fontWeight: 'bold' }}>Test Merkezi</Text>
+              <Text style={{ color: COLORS.mutedText, fontSize: FONTS.sizes.xs, marginTop: 2 }}>Oyun testlerini ve geri bildirimleri yönet</Text>
+            </View>
+          </View>
+          <Text style={{ color: COLORS.accentColor, fontWeight: 'bold', fontSize: 20 }}>→</Text>
+        </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Genel Performans</Text>
         <View style={styles.statsRow}>
@@ -304,7 +377,7 @@ export default function DashboardScreen() {
                 <Text style={styles.itemTitle}>{name}</Text>
                 <Text style={styles.itemPrice}>{price === 0 || !price ? 'Ücretsiz' : `₺${price}`}</Text>
               </View>
-              
+
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#5b5bfe' }]} onPress={() => openEditModal(type, item)}>
                   <Text style={styles.actionBtnText}>✏️ Düzenle</Text>
@@ -313,7 +386,7 @@ export default function DashboardScreen() {
                   <Text style={styles.actionBtnText}>🗑️ Sil</Text>
                 </TouchableOpacity>
               </View>
-              
+
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4caf50' }]} onPress={() => router.push({ pathname: '/detail', params: { id: id, type: type } })}>
                   <Text style={styles.actionBtnText}>👁️ Sayfayı Gör</Text>
@@ -324,7 +397,7 @@ export default function DashboardScreen() {
               </View>
 
               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#9b59b6', width: '100%' }]} onPress={() => openCommentsModal(type, item)}>
-                  <Text style={styles.actionBtnText}>💬 Yorumları Gör</Text>
+                <Text style={styles.actionBtnText}>💬 Yorumları Gör</Text>
               </TouchableOpacity>
             </View>
           );
@@ -332,7 +405,7 @@ export default function DashboardScreen() {
         <View style={{ height: 50 }} />
       </ScrollView>
 
-      {/* MODALLAR */}
+      {/* --- MEVCUT MODALLAR --- */}
       <Modal visible={commentsModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -389,15 +462,38 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => setEditModalVisible(false)}><Text style={styles.closeBtn}>✖</Text></TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            
+
             <Text style={styles.label}>Ad</Text>
-            <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholderTextColor={COLORS.mutedText}/>
+            <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholderTextColor={COLORS.mutedText} />
+
+            {editType === 'Game' && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: SPACING.md, borderRadius: RADIUS.sm,
+                marginBottom: SPACING.md, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)'
+              }}>
+                <View style={{ flex: 1, paddingRight: 15 }}>
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: COLORS.white, marginBottom: 4 }}>
+                    Test Programı
+                  </Text>
+                  <Text style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.6)' }}>
+                    Test programını kapattığınız an tüm test verileri silinir.
+                  </Text>
+                </View>
+                <Switch
+                  value={editIsTestGame}
+                  onValueChange={handleTestGameToggle}
+                  trackColor={{ false: "rgba(255, 255, 255, 0.2)", true: COLORS.accentColor }}
+                  thumbColor={editIsTestGame ? COLORS.white : "#f4f3f4"}
+                />
+              </View>
+            )}
 
             <Text style={styles.label}>Açıklama</Text>
-            <TextInput style={[styles.input, { height: 100 }]} value={editDesc} onChangeText={setEditDesc} multiline textAlignVertical="top"/>
+            <TextInput style={[styles.input, { height: 100 }]} value={editDesc} onChangeText={setEditDesc} multiline textAlignVertical="top" />
 
             <Text style={styles.label}>Fiyat (₺)</Text>
-            <TextInput style={styles.input} value={editPrice} onChangeText={setEditPrice} keyboardType="numeric"/>
+            <TextInput style={styles.input} value={editPrice} onChangeText={setEditPrice} keyboardType="numeric" />
 
             <Text style={styles.label}>Kapak Görseli</Text>
             <TouchableOpacity style={styles.imagePickerBtn} onPress={pickCoverImage}>
@@ -448,8 +544,93 @@ export default function DashboardScreen() {
             <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit} disabled={isSaving}>
               {isSaving ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveBtnText}>Değişiklikleri Kaydet</Text>}
             </TouchableOpacity>
-            
-            <View style={{ height: 40 }}/>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* --- TEST MERKEZİ MODALI --- */}
+      <Modal visible={testCenterVisible} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Test Aşamasındaki Oyunlarım</Text>
+            <TouchableOpacity onPress={() => setTestCenterVisible(false)}>
+              <Text style={styles.closeBtn}>✖</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalBody}>
+            {testGames && testGames.length > 0 ? (
+              testGames.map((item) => (
+                <View key={item.id} style={[styles.itemCard, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <Image
+                    source={{ uri: item.gameCover ? `${API_URL}/uploads/${item.gameCover}` : 'https://via.placeholder.com/150' }}
+                    style={{ width: 70, height: 70, borderRadius: RADIUS.md, marginRight: SPACING.md }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemTitle} numberOfLines={1}>{item.gameName}</Text>
+                    <Text style={{ color: COLORS.accentColor, fontSize: 12, fontWeight: 'bold' }}>Test Süreci Aktif</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={{ backgroundColor: COLORS.accentColor, paddingHorizontal: 15, paddingVertical: 10, borderRadius: RADIUS.sm }}
+                    onPress={() => openTestMedia(item)}
+                  >
+                    <Text style={{ color: COLORS.white, fontWeight: 'bold', fontSize: 12 }}>İncele</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>Şu an test programında olan bir oyununuz bulunmuyor.</Text>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* --- TEST MEDYALARI MODALI --- */}
+      <Modal visible={mediaModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              {selectedTestGame?.gameName} - Medyalar
+            </Text>
+            <TouchableOpacity onPress={() => setMediaModalVisible(false)}>
+              <Text style={styles.closeBtn}>✖</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg }}>
+            <View style={styles.tabContainer}>
+              <TouchableOpacity style={[styles.tabBtn, mediaTab === 'video' && styles.tabBtnActive]} onPress={() => setMediaTab('video')}>
+                <Text style={[styles.tabText, mediaTab === 'video' && styles.tabTextActive]}>Videolar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.tabBtn, mediaTab === 'image' && styles.tabBtnActive]} onPress={() => setMediaTab('image')}>
+                <Text style={[styles.tabText, mediaTab === 'image' && styles.tabTextActive]}>Fotoğraflar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView style={styles.modalBody}>
+            {mediaTab === 'video' ? (
+              testMedia.videos.length > 0 ? (
+                testMedia.videos.map(v => (
+                  <View key={v.id} style={styles.commentBox}>
+                    <Text style={styles.commentText}>🎥 {v.videoPath}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Henüz test videosu gönderilmemiş.</Text>
+              )
+            ) : (
+              testMedia.images.length > 0 ? (
+                testMedia.images.map(img => (
+                  <View key={img.id} style={styles.commentBox}>
+                    <Text style={styles.commentText}>🖼️ {img.imagePath}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Henüz test fotoğrafı gönderilmemiş.</Text>
+              )
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -467,11 +648,24 @@ const styles = StyleSheet.create({
   headerTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   scrollContent: { padding: SPACING.xl },
 
-  profileCard: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.xxl, borderWidth: 1, borderColor: '#333' },
+  profileCard: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.xl, borderWidth: 1, borderColor: '#333' },
   avatarCircle: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: COLORS.accentColor, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, backgroundColor: 'rgba(233,69,96,0.1)' },
   avatarText: { color: COLORS.accentColor, fontSize: 32, fontWeight: 'bold' },
   userName: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: 4 },
   userRole: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm },
+
+  // Test Merkezi Butonu İçin Yeni Stil
+  testCenterBtn: {
+    backgroundColor: 'rgba(233,69,96,0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.accentColor,
+    marginBottom: SPACING.xl
+  },
 
   sectionTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: SPACING.md },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.xxl },
@@ -492,7 +686,7 @@ const styles = StyleSheet.create({
   itemInfo: { marginBottom: SPACING.lg },
   itemTitle: { color: COLORS.white, fontSize: FONTS.sizes.md, fontWeight: 'bold', marginBottom: 4 },
   itemPrice: { color: COLORS.accentColor, fontSize: FONTS.sizes.sm, fontWeight: 'bold' },
-  
+
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACING.md, marginBottom: SPACING.md },
   actionBtn: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.sm, alignItems: 'center' },
   actionBtnText: { color: COLORS.white, fontSize: FONTS.sizes.sm, fontWeight: 'bold' },
@@ -504,7 +698,7 @@ const styles = StyleSheet.create({
   modalTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   closeBtn: { color: COLORS.accentColor, fontSize: 24, fontWeight: 'bold' },
   modalBody: { padding: SPACING.xl },
-  
+
   // Grafik
   chartWrapper: { backgroundColor: COLORS.cardBg, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.accentColor, marginBottom: SPACING.xl },
   chartTitle: { color: COLORS.white, textAlign: 'center', marginBottom: SPACING.md, fontWeight: 'bold' },
