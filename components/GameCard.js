@@ -7,28 +7,24 @@ const PLACEHOLDER_IMAGE = require('../assets/images/sheriffGamesLogo.png');
 export function GameCard({ game, onPress }) {
   const [imgError, setImgError] = useState(false);
   const isPlaceholder = !game.image || imgError;
+  const displayGenre = game.genre || game.categoryNames || 'Oyun';
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.imageContainer}>
         <Image 
-          source={isPlaceholder ? PLACEHOLDER_IMAGE : { uri: game.image }} 
+          source={isPlaceholder ? PLACEHOLDER_IMAGE : (typeof game.image === 'string' ? { uri: game.image } : game.image)} 
           style={[
             styles.image, 
-            isPlaceholder && { 
-              resizeMode: 'contain', 
-              width: '60%', 
-              height: '60%', 
-              opacity: 0.8
-            }
+            isPlaceholder && { resizeMode: 'contain', width: '60%', height: '60%', opacity: 0.8 }
           ]}
           onError={() => setImgError(true)} 
         />
       </View>
       <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={1}>{game.title}</Text>
-        <Text style={styles.genre}>{game.genre ? game.genre.split(',')[0] : 'Diğer'}</Text>
-        <Text style={styles.price}>{game.price === 0 || !game.price ? 'Ücretsiz' : `₺${game.price}`}</Text>
+        <Text style={styles.title} numberOfLines={1}>{game.title || game.gameName}</Text>
+        <Text style={styles.genre}>{displayGenre.split(',')[0]}</Text>
+        <Text style={styles.price}>{game.price == 0 || !game.price ? 'Ücretsiz' : `₺${game.price}`}</Text>
       </View>
     </TouchableOpacity>
   );

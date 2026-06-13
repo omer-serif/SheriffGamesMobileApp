@@ -1,7 +1,6 @@
 
 ===== ./app/AssetScreen.js =====
 
-
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, TextInput, ActivityIndicator,
@@ -13,6 +12,9 @@ import { AssetCard, SectionTitle } from '../components';
 const ASSET_TYPES = ['Tümü', 'Karakter', 'UI', 'Ses', 'Çevre', 'Animasyon'];
 const API_URL = 'http://localhost:3001';
 
+// Kendi logonuzu varsayılan resim olarak projeye dahil ediyoruz
+const DEFAULT_IMAGE = require('../assets/images/sheriffGamesLogo.png');
+
 export default function AssetsScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState('Tümü');
@@ -21,7 +23,8 @@ export default function AssetsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/assets`)
+    // Rota /api/assets olarak güncellendi (server.js'deki yapıya uygun olması için)
+    fetch(`${API_URL}/api/assets`)
       .then(response => response.json())
       .then(data => {
         const formattedAssets = data.map(item => ({
@@ -29,7 +32,10 @@ export default function AssetsScreen({ navigation }) {
           title: item.assetName,
           price: item.assetPrice || 0,
           type: item.typeNames ? item.typeNames.split(', ')[0] : 'Diğer',
-          image: item.assetImage ? `${API_URL}/uploads/${item.assetImage}` : 'https://via.placeholder.com/400x250',
+          // Resim varsa obje ({ uri: ... }), yoksa doğrudan require() dönüyoruz
+          image: item.assetImage 
+            ? { uri: `${API_URL}/uploads/${item.assetImage}` } 
+            : DEFAULT_IMAGE,
         }));
         
         setAssets(formattedAssets);
@@ -57,12 +63,36 @@ export default function AssetsScreen({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={COLORS.assetTagColor} />
+        <ActivityIndicator size="large" color={COLORS.accentColor} />
         <Text style={{ color: COLORS.white, marginTop: 10 }}>Assetler Yükleniyor...</Text>
       </SafeAreaView>
     );
   }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+       {/* Dosyanın orijinal return bloğunun devamı (Flatlist vs.) */}
+       <View style={{ padding: SPACING.md }}>
+         <TextInput 
+           style={{ backgroundColor: COLORS.cardBg, color: COLORS.white, padding: 10, borderRadius: RADIUS.sm }}
+           placeholder="Asset Ara..."
+           placeholderTextColor={COLORS.mutedText}
+           value={search}
+           onChangeText={setSearch}
+         />
+       </View>
+       <FlatList
+         data={filteredAssets}
+         keyExtractor={(item) => item.id}
+         renderItem={renderAsset}
+       />
+    </SafeAreaView>
+  );
 }
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bgColor },
+});
 
 ===== ./app/index.js =====
 
@@ -83,11 +113,14 @@ const ASSET_TYPES = ['Tümü', 'Karakter', 'UI', 'Ses', 'Çevre', 'Animasyon'];
 
 const { width } = Dimensions.get('window');
 
+// 1. LOGOMUZU İÇE AKTARIYORUZ
+const DEFAULT_IMAGE = require('../assets/images/sheriffGamesLogo.png');
+
 export default function HomeScreen() {
-  const [viewMode, setViewMode] = useState('home'); 
+  const [viewMode, setViewMode] = useState('home');
   const [search, setSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('Tümü');
-  
+
   const [games, setGames] = useState([]);
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -107,28 +140,53 @@ export default function HomeScreen() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [gRes, aRes] = await Promise.all([
-          fetch(`${API_URL}/games`),
-          fetch(`${API_URL}/assets`)
-        ]);
-        
-        const gData = await gRes.json();
-        const aData = await aRes.json();
+        // --- 1. OYUNLARI ÇEK ---
+        const gamesRes = await fetch(`${API_URL}/api/games`); 
+        const gamesText = await gamesRes.text();
 
-        setGames(gData.map(i => ({
-          id: i.gamesID.toString(), title: i.gameName, price: i.gamePrice || 0,
-          genre: i.categoryNames || 'Diğer', image: i.gameImage ? `${API_URL}/uploads/${i.gameImage}` : null
-        })));
+        let gamesData = [];
+        try { gamesData = JSON.parse(gamesText); } 
+        catch (e) { console.error("Oyunlar API'si JSON dönmedi:", gamesText.substring(0, 150)); }
 
-        setAssets(aData.map(i => ({
-          id: i.assetID.toString(), title: i.assetName, price: i.assetPrice || 0,
-          type: i.typeNames ? i.typeNames.split(', ')[0] : 'Diğer', image: i.assetImage ? `${API_URL}/uploads/${i.assetImage}` : null
-        })));
+        const safeGames = Array.isArray(gamesData) ? gamesData : [];
+        const formattedGames = safeGames.map(item => ({
+          ...item,
+          id: item.gamesID?.toString() || item.id?.toString(),
+          title: item.gameName,
+          price: item.gamePrice,
+          // 2. RESİM VARSA URI, YOKSA DEFAULT_IMAGE KULLAN
+          image: item.gameImage ? { uri: `${API_URL}/uploads/${item.gameImage}` } : DEFAULT_IMAGE,
+        }));
 
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
+        // --- 2. ASSETLERİ ÇEK ---
+        const assetsRes = await fetch(`${API_URL}/api/assets`); 
+        const assetsText = await assetsRes.text();
+
+        let assetsData = [];
+        try { assetsData = JSON.parse(assetsText); } 
+        catch (e) { console.error("Assetler API'si JSON dönmedi:", assetsText.substring(0, 150)); }
+
+        const safeAssets = Array.isArray(assetsData) ? assetsData : [];
+        const formattedAssets = safeAssets.map(item => ({
+          ...item,
+          id: item.assetID?.toString() || item.id?.toString(),
+          title: item.assetName,
+          price: item.assetPrice,
+          // 3. RESİM VARSA URI, YOKSA DEFAULT_IMAGE KULLAN
+          image: item.assetImage ? { uri: `${API_URL}/uploads/${item.assetImage}` } : DEFAULT_IMAGE,
+        }));
+
+        setGames(formattedGames);
+        setAssets(formattedAssets);
+
+      } catch (error) {
+        console.error("Ana sayfa verileri çekilirken ağ hatası:", error);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchData();
+
+    fetchData(); 
   }, []);
 
   const handleLogout = async () => {
@@ -136,11 +194,10 @@ export default function HomeScreen() {
     setUser(null);
   };
 
-  const filteredData = viewMode === 'games' 
+  const filteredData = viewMode === 'games'
     ? games.filter(g => g.title.toLowerCase().includes(search.toLowerCase()) && (selectedFilter === 'Tümü' || g.genre.includes(selectedFilter)))
     : assets.filter(a => a.title.toLowerCase().includes(search.toLowerCase()) && (selectedFilter === 'Tümü' || a.type === selectedFilter));
 
-  // Yeni eklenenleri bulmak için listeyi tersine çeviriyoruz (En yeniler en üstte)
   const newArrivals = [...games].reverse().slice(0, 5);
 
   if (loading) {
@@ -156,26 +213,35 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => setViewMode('home')}>
           <Text style={styles.logo}>SHERIFF</Text>
         </TouchableOpacity>
-        
+
         {user ? (
           <View style={styles.navActions}>
-            <TouchableOpacity style={styles.panelBtn} onPress={() => router.push('/dashboard')}><Text style={styles.btnText}>PANELİM</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}><Text style={styles.btnText}>ÇIKIŞ</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.panelBtn} onPress={() => router.push('/library')}>
+              <Text style={styles.btnText}>KÜTÜPHANEM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.panelBtn} onPress={() => router.push('/dashboard')}>
+              <Text style={styles.btnText}>PANELİM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Text style={styles.btnText}>ÇIKIŞ</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}><Text style={styles.loginBtnText}>GİRİŞ</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/login')}>
+            <Text style={styles.loginBtnText}>GİRİŞ</Text>
+          </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.subNavbar}>
-        <TouchableOpacity 
-          style={[styles.navLink, viewMode === 'games' && styles.navLinkActive]} 
+        <TouchableOpacity
+          style={[styles.navLink, viewMode === 'games' && styles.navLinkActive]}
           onPress={() => { setViewMode('games'); setSelectedFilter('Tümü'); }}
         >
           <Text style={[styles.navLinkText, viewMode === 'games' && styles.navLinkTextActive]}>OYUNLAR</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.navLink, viewMode === 'assets' && styles.navLinkActive]} 
+        <TouchableOpacity
+          style={[styles.navLink, viewMode === 'assets' && styles.navLinkActive]}
           onPress={() => { setViewMode('assets'); setSelectedFilter('Tümü'); }}
         >
           <Text style={[styles.navLinkText, viewMode === 'assets' && styles.navLinkTextActive]}>ASSETLER</Text>
@@ -186,60 +252,65 @@ export default function HomeScreen() {
         <ScrollView style={styles.homeScroll} showsVerticalScrollIndicator={false}>
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>🔥 Popüler Oyunlar</Text></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={{ paddingHorizontal: SPACING.xl }}>
-            {games.slice(0, 5).map(game => (
-              <TouchableOpacity key={game.id} style={styles.largeCard} onPress={() => router.push({ pathname: '/detail', params: { id: game.id, type: 'Game' } })} activeOpacity={0.9}>
-                <Image source={{ uri: game.image || 'https://via.placeholder.com/400x200' }} style={styles.largeCardImage} />
+            {games.slice(0, 5).map((game, index) => (
+              <TouchableOpacity key={`${game.id}-${index}`} style={styles.largeCard} onPress={() => router.push({ pathname: '/detail', params: { id: game.id, type: 'Game' } })} activeOpacity={0.9}>
+                {/* 4. KRİTİK DEĞİŞİKLİK: source={{ uri: ... }} yerine doğrudan source={game.image} kullanıyoruz */}
+                <Image source={game.image} style={styles.largeCardImage} />
                 <View style={styles.largeCardInfo}>
                   <Text style={styles.largeCardTitle} numberOfLines={1}>{game.title}</Text>
                   <View style={styles.largeCardFooter}>
-                    <Text style={styles.largeCardGenre}>{game.genre.split(',')[0]}</Text>
+                    <Text style={styles.largeCardGenre}>{game.genre ? game.genre.split(',')[0] : 'Oyun'}</Text>
                     <Text style={styles.largeCardPrice}>{game.price === 0 ? 'ÜCRETSİZ' : `₺${game.price}`}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
+          
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>🎨 Trend Assetler</Text></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll} contentContainerStyle={{ paddingHorizontal: SPACING.xl }}>
-            {assets.slice(0, 5).map(asset => (
-              <TouchableOpacity key={asset.id} style={styles.largeCard} onPress={() => router.push({ pathname: '/detail', params: { id: asset.id, type: 'Asset' } })} activeOpacity={0.9}>
-                <Image source={{ uri: asset.image || 'https://via.placeholder.com/400x200' }} style={styles.largeCardImage} />
+            {assets.slice(0, 5).map((asset, index) => (
+              <TouchableOpacity key={`${asset.id}-${index}`} style={styles.largeCard} onPress={() => router.push({ pathname: '/detail', params: { id: asset.id, type: 'Asset' } })} activeOpacity={0.9}>
+                {/* 5. KRİTİK DEĞİŞİKLİK: source={asset.image} */}
+                <Image source={asset.image} style={styles.largeCardImage} />
                 <View style={styles.largeCardInfo}>
                   <Text style={styles.largeCardTitle} numberOfLines={1}>{asset.title}</Text>
                   <View style={styles.largeCardFooter}>
-                    <Text style={styles.largeCardGenre}>{asset.type}</Text>
+                    <Text style={styles.largeCardGenre}>{asset.type || 'Asset'}</Text>
                     <Text style={styles.largeCardPrice}>{asset.price === 0 ? 'ÜCRETSİZ' : `₺${asset.price}`}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
+
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>🚀 Yeni Eklenenler</Text></View>
           <View style={styles.verticalListContainer}>
-            {newArrivals.map(game => (
-              <TouchableOpacity key={game.id} style={styles.verticalCard} onPress={() => router.push({ pathname: '/detail', params: { id: game.id, type: 'Game' } })} activeOpacity={0.8}>
-                <Image source={{ uri: game.image || 'https://via.placeholder.com/150' }} style={styles.verticalCardImage} />
+            {newArrivals.map((game, index) => (
+              <TouchableOpacity key={`new-${game.id}-${index}`} style={styles.verticalCard} onPress={() => router.push({ pathname: '/detail', params: { id: game.id, type: 'Game' } })} activeOpacity={0.8}>
+                {/* 6. KRİTİK DEĞİŞİKLİK: source={game.image} */}
+                <Image source={game.image} style={styles.verticalCardImage} />
                 <View style={styles.verticalCardInfo}>
                   <Text style={styles.verticalCardTitle} numberOfLines={2}>{game.title}</Text>
-                  <Text style={styles.verticalCardGenre}>{game.genre}</Text>
+                  <Text style={styles.verticalCardGenre}>{game.genre || 'Oyun'}</Text>
                   <Text style={styles.verticalCardPrice}>{game.price === 0 ? 'Ücretsiz' : `₺${game.price}`}</Text>
                 </View>
               </TouchableOpacity>
             ))}
           </View>
-          
+
           <View style={{ height: 100 }} />
         </ScrollView>
       ) : (
-        /* LİSTE GÖRÜNÜMÜ (OYUNLAR VEYA ASSETLER) */
+        /* LİSTE GÖRÜNÜMÜ */
         <FlatList
           data={filteredData}
-          keyExtractor={item => item.id}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
           numColumns={2}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listPadding}
           renderItem={({ item }) => (
-            viewMode === 'games' 
+            viewMode === 'games'
               ? <GameCard game={item} onPress={() => router.push({ pathname: '/detail', params: { id: item.id, type: 'Game' } })} />
               : <AssetCard asset={item} onPress={() => router.push({ pathname: '/detail', params: { id: item.id, type: 'Asset' } })} />
           )}
@@ -266,7 +337,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bgColor },
   center: { justifyContent: 'center', alignItems: 'center' },
-  
   navbar: { backgroundColor: COLORS.navbarBg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.lg, borderBottomWidth: 1, borderColor: '#333' },
   logo: { color: COLORS.accentColor, fontSize: 20, fontWeight: 'bold', letterSpacing: 2 },
   navActions: { flexDirection: 'row', gap: 8 },
@@ -275,20 +345,15 @@ const styles = StyleSheet.create({
   btnText: { color: COLORS.white, fontSize: 10, fontWeight: 'bold' },
   loginBtn: { backgroundColor: COLORS.accentColor, paddingHorizontal: 15, paddingVertical: 8, borderRadius: RADIUS.sm },
   loginBtnText: { color: COLORS.white, fontWeight: 'bold', fontSize: 12 },
-
   subNavbar: { flexDirection: 'row', backgroundColor: COLORS.navbarBg, borderBottomWidth: 2, borderBottomColor: COLORS.accentColor },
   navLink: { flex: 1, paddingVertical: 15, alignItems: 'center' },
   navLinkActive: { borderBottomWidth: 3, borderBottomColor: COLORS.white },
   navLinkText: { color: COLORS.mutedText, fontWeight: 'bold', fontSize: 12, letterSpacing: 1 },
   navLinkTextActive: { color: COLORS.white },
-
-  // Yenilenmiş Home Görünümü Stilleri
   homeScroll: { flex: 1, paddingTop: SPACING.lg },
   sectionHeader: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.md, marginTop: SPACING.md },
   sectionTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   horizontalScroll: { marginBottom: SPACING.xxl },
-  
-  // Büyük Vitrin Kartları
   largeCard: { width: width * 0.75, marginRight: SPACING.lg, backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, overflow: 'hidden', borderWidth: 1, borderColor: '#333' },
   largeCardImage: { width: '100%', height: 160, resizeMode: 'cover' },
   largeCardInfo: { padding: SPACING.md },
@@ -296,8 +361,6 @@ const styles = StyleSheet.create({
   largeCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   largeCardGenre: { color: COLORS.mutedText, fontSize: FONTS.sizes.xs, backgroundColor: '#161625', paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.sm, overflow: 'hidden' },
   largeCardPrice: { color: COLORS.accentColor, fontWeight: 'bold', fontSize: FONTS.sizes.sm },
-
-  // Dikey Yeni Eklenenler Kartları
   verticalListContainer: { paddingHorizontal: SPACING.xl },
   verticalCard: { flexDirection: 'row', backgroundColor: COLORS.cardBg, borderRadius: RADIUS.md, overflow: 'hidden', marginBottom: SPACING.md, borderWidth: 1, borderColor: '#333' },
   verticalCardImage: { width: 100, height: 100, resizeMode: 'cover' },
@@ -305,8 +368,6 @@ const styles = StyleSheet.create({
   verticalCardTitle: { color: COLORS.white, fontSize: FONTS.sizes.sm, fontWeight: 'bold', marginBottom: 4 },
   verticalCardGenre: { color: COLORS.mutedText, fontSize: FONTS.sizes.xs, marginBottom: 8 },
   verticalCardPrice: { color: COLORS.accentColor, fontWeight: 'bold', fontSize: FONTS.sizes.sm },
-
-  // Liste Görünümü
   listPadding: { padding: SPACING.xl },
   row: { justifyContent: 'space-between', marginBottom: SPACING.md },
   searchBox: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.sm, paddingHorizontal: SPACING.md, marginBottom: SPACING.lg },
@@ -469,6 +530,265 @@ const styles = StyleSheet.create({
   footerLink: { color: COLORS.accentColor, fontSize: FONTS.sizes.sm, fontWeight: 'bold' }
 });
 
+===== ./app/library.js =====
+
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  TouchableOpacity, ActivityIndicator, Image, Alert, Modal
+} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { COLORS, SPACING, RADIUS, FONTS } from '../constants/theme';
+
+const API_URL = 'http://localhost:3001';
+
+export default function LibraryScreen() {
+  const [user, setUser] = useState(null);
+  const [libraryData, setLibraryData] = useState({ games: [], assets: [] });
+  const [activeTab, setActiveTab] = useState('games'); // 'games' veya 'assets'
+  const [loading, setLoading] = useState(true);
+  
+  // Test Yükleme Modalı State'leri
+  const [testModalVisible, setTestModalVisible] = useState(false);
+  const [selectedGameForTest, setSelectedGameForTest] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const fetchLibrary = async () => {
+    setLoading(true);
+    try {
+      const userDataStr = await AsyncStorage.getItem('user');
+      if (!userDataStr) { router.replace('/login'); return; }
+      
+      const currentUser = JSON.parse(userDataStr);
+      setUser(currentUser);
+
+      const res = await fetch(`${API_URL}/api/my-library/${currentUser.userID}`);
+      const data = await res.json();
+      setLibraryData(data); // { games: [...], assets: [...] }
+    } catch (error) {
+      console.error("Kütüphane yüklenemedi", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(useCallback(() => { fetchLibrary(); }, []));
+
+  const openTestModal = (game) => {
+    setSelectedGameForTest(game);
+    setTestModalVisible(true);
+  };
+
+  const pickAndUploadMedia = async (mediaType) => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: mediaType === 'video' ? ImagePicker.MediaTypeOptions.Videos : ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: mediaType === 'image',
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setIsUploading(true);
+      const localUri = result.assets[0].uri;
+      const filename = localUri.split('/').pop();
+      
+      let type = '';
+      if (mediaType === 'video') {
+        const match = /\.(\w+)$/.exec(filename);
+        type = match ? `video/${match[1]}` : `video/mp4`;
+      } else {
+        const match = /\.(\w+)$/.exec(filename);
+        type = match ? `image/${match[1]}` : `image/jpeg`;
+      }
+
+      const formData = new FormData();
+      formData.append('mediaFile', { uri: localUri, name: filename, type });
+      formData.append('gameId', selectedGameForTest.itemID);
+      formData.append('userId', user.userID);
+      formData.append('mediaType', mediaType);
+
+      try {
+        const response = await fetch(`${API_URL}/api/upload-test-media`, {
+          method: 'POST',
+          body: formData,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        const data = await response.json();
+        if (data.status === 'Success') {
+          Alert.alert('Başarılı!', 'Test veriniz geliştiriciye iletildi. Katkınız için teşekkürler.');
+          setTestModalVisible(false);
+        } else {
+          Alert.alert('Hata', 'Yükleme başarısız oldu.');
+        }
+      } catch (error) {
+        console.error('Yükleme hatası:', error);
+        Alert.alert('Hata', 'Sunucu bağlantı sorunu yaşandı.');
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  const renderItems = (items) => {
+    if (items.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>{activeTab === 'games' ? '🎮' : '📦'}</Text>
+          <Text style={styles.emptyText}>
+            Kütüphanenizde henüz hiç {activeTab === 'games' ? 'oyun' : 'asset'} yok.
+          </Text>
+          <TouchableOpacity onPress={() => router.push('/')} style={styles.exploreBtn}>
+            <Text style={styles.exploreBtnText}>Keşfetmeye Başla</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return items.map((item, index) => (
+      <View key={`${item.itemType}-${item.itemID}-${index}`} style={styles.gameCard}>
+        <Image 
+          source={{ uri: item.itemImage ? `${API_URL}/uploads/${item.itemImage}` : 'https://via.placeholder.com/150' }} 
+          style={styles.gameCover} 
+        />
+        <View style={styles.gameInfo}>
+          <Text style={styles.gameTitle} numberOfLines={1}>{item.itemName}</Text>
+          
+          <TouchableOpacity style={styles.downloadBtn}>
+            <Text style={styles.downloadBtnText}>📥 {item.itemType === 'Game' ? 'Oyunu' : 'Asseti'} İndir</Text>
+          </TouchableOpacity>
+
+          {/* SADECE OYUN VE TEST PROGRAMINDAYSA GÖRÜNÜR */}
+          {item.itemType === 'Game' && item.isTestGame === 1 && (
+            <TouchableOpacity style={styles.testBtn} onPress={() => openTestModal(item)}>
+              <Text style={styles.testBtnText}>🧪 Test Görevi</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    ));
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={styles.backBtnText}>{'< Geri'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Kütüphanem</Text>
+        <View style={{ width: 50 }} />
+      </View>
+
+      <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.md }}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tabBtn, activeTab === 'games' && styles.tabBtnActive]} 
+            onPress={() => setActiveTab('games')}
+          >
+            <Text style={[styles.tabText, activeTab === 'games' && styles.tabTextActive]}>Oyunlarım ({libraryData.games.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tabBtn, activeTab === 'assets' && styles.tabBtnActive]} 
+            onPress={() => setActiveTab('assets')}
+          >
+            <Text style={[styles.tabText, activeTab === 'assets' && styles.tabTextActive]}>Assetlerim ({libraryData.assets.length})</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderItems(activeTab === 'games' ? libraryData.games : libraryData.assets)}
+      </ScrollView>
+
+      {/* --- TEST YÜKLEME MODALI --- */}
+      <Modal visible={testModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle} numberOfLines={1}>{selectedGameForTest?.itemName} - Test Görevi</Text>
+            <Text style={styles.modalSubtitle}>
+              Geliştirici bu oyun için test programı başlattı. Oyunu oynarken karşılaştığınız bir hatayı veya deneyiminizi gösterecek bir medya yükleyin.
+            </Text>
+
+            {isUploading ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={COLORS.accentColor} />
+                <Text style={{ color: COLORS.white, marginTop: 15 }}>Medya Yükleniyor... Lütfen bekleyin.</Text>
+              </View>
+            ) : (
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={[styles.uploadActionBtn, { backgroundColor: '#e94560' }]} onPress={() => pickAndUploadMedia('video')}>
+                  <Text style={{ fontSize: 24, marginBottom: 5 }}>🎥</Text>
+                  <Text style={styles.uploadActionText}>Ekran Kaydı Seç</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.uploadActionBtn, { backgroundColor: '#5b5bfe' }]} onPress={() => pickAndUploadMedia('image')}>
+                  <Text style={{ fontSize: 24, marginBottom: 5 }}>🖼️</Text>
+                  <Text style={styles.uploadActionText}>Ekran Görüntüsü Seç</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity onPress={() => !isUploading && setTestModalVisible(false)} style={styles.closeBtn}>
+              <Text style={{ color: COLORS.white, fontWeight: 'bold' }}>İptal Et</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bgColor },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SPACING.lg, backgroundColor: COLORS.navbarBg, borderBottomWidth: 1, borderBottomColor: '#333' },
+  backBtn: { padding: SPACING.sm }, backBtnText: { color: COLORS.mutedText, fontSize: FONTS.sizes.md },
+  headerTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
+  scrollContent: { padding: SPACING.lg },
+  
+  tabContainer: { flexDirection: 'row', backgroundColor: COLORS.cardBg, borderRadius: RADIUS.md, padding: 4, marginBottom: SPACING.sm },
+  tabBtn: { flex: 1, paddingVertical: SPACING.md, alignItems: 'center', borderRadius: RADIUS.sm },
+  tabBtnActive: { backgroundColor: 'rgba(233,69,96,0.15)' },
+  tabText: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm, fontWeight: 'bold' },
+  tabTextActive: { color: COLORS.accentColor },
+
+  gameCard: { flexDirection: 'row', backgroundColor: COLORS.cardBg, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.md, borderWidth: 1, borderColor: '#333' },
+  gameCover: { width: 90, height: 90, borderRadius: RADIUS.sm, marginRight: SPACING.md },
+  gameInfo: { flex: 1, justifyContent: 'center' },
+  gameTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: 10 },
+  
+  downloadBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 8, borderRadius: RADIUS.sm, alignItems: 'center', marginBottom: 8 },
+  downloadBtnText: { color: COLORS.white, fontSize: 12, fontWeight: 'bold' },
+  
+  testBtn: { backgroundColor: 'rgba(91,91,254,0.15)', paddingVertical: 8, borderRadius: RADIUS.sm, alignItems: 'center', borderWidth: 1, borderColor: '#5b5bfe' },
+  testBtnText: { color: '#5b5bfe', fontSize: 12, fontWeight: 'bold' },
+
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
+  emptyIcon: { fontSize: 60, marginBottom: 20 },
+  emptyText: { color: COLORS.mutedText, fontSize: FONTS.sizes.md, marginBottom: 20 },
+  exploreBtn: { backgroundColor: COLORS.accentColor, paddingHorizontal: 20, paddingVertical: 10, borderRadius: RADIUS.sm },
+  exploreBtnText: { color: COLORS.white, fontWeight: 'bold' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: SPACING.lg },
+  modalContent: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, padding: SPACING.xl, borderWidth: 1, borderColor: '#333' },
+  modalTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  modalSubtitle: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
+  modalButtons: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  uploadActionBtn: { flex: 1, padding: 20, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center' },
+  uploadActionText: { color: COLORS.white, fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  closeBtn: { backgroundColor: '#333', padding: 15, borderRadius: RADIUS.sm, alignItems: 'center' }
+});
+
 ===== ./app/login.js =====
 
 import React, { useState } from 'react';
@@ -593,13 +913,14 @@ const styles = StyleSheet.create({
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Image, Alert
+  TouchableOpacity, ActivityIndicator, Image, Alert, Switch
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { COLORS, SPACING, RADIUS, FONTS } from '../constants/theme';
+
 
 const API_URL = 'http://localhost:3001';
 
@@ -609,14 +930,16 @@ export default function PublishScreen() {
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState([]); 
+  const [categories, setCategories] = useState([]);
 
   // Form State'leri
   const [name, setName] = useState('');
-  const [shortDesc, setShortDesc] = useState(''); 
+  const [shortDesc, setShortDesc] = useState('');
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState('');
   const [selectedCats, setSelectedCats] = useState([]);
+
+  const [isTestGame, setIsTestGame] = useState(false);
 
   // Dosya State'leri
   const [coverImage, setCoverImage] = useState(null);
@@ -633,7 +956,7 @@ export default function PublishScreen() {
       }
       setUser(JSON.parse(userData));
 
-      
+
       try {
         const endpoint = isGame ? '/game-types' : '/asset-types';
         const res = await fetch(`${API_URL}${endpoint}`);
@@ -688,7 +1011,7 @@ export default function PublishScreen() {
     setLoading(true);
     try {
       const formData = new FormData();
-      
+
       // Metin alanları
       const finalDesc = isGame && shortDesc ? `${shortDesc}\n\n${desc}` : desc; // Kısa açıklamayı birleştir
       formData.append('userID', user.userID);
@@ -696,6 +1019,7 @@ export default function PublishScreen() {
       formData.append(isGame ? 'gameDescription' : 'assetDescription', finalDesc);
       formData.append(isGame ? 'gamePrice' : 'assetPrice', price || 0);
       formData.append(isGame ? 'gameTypes' : 'assetTypes', JSON.stringify(selectedCats));
+      formData.append('isTestGame', isTestGame ? 'true' : 'false');
 
       // Kapak Resmi
       const coverUri = coverImage.uri;
@@ -742,9 +1066,9 @@ export default function PublishScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         <Text style={styles.sectionTitle}>1. {isGame ? 'Temel Tanıtım' : 'Asset Bilgileri'}</Text>
-        
+
         <Text style={styles.label}>{isGame ? 'Oyun Adı *' : 'Asset Adı *'}</Text>
         <TextInput style={styles.input} value={name} onChangeText={setName} />
 
@@ -755,10 +1079,39 @@ export default function PublishScreen() {
           </>
         )}
 
+        {type === 'Game' && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)', // Diğer inputlarla uyumlu karanlık saydam arkaplan
+            padding: SPACING,
+            borderRadius: RADIUS,
+            marginVertical: SPACING,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+          }}>
+            <View style={{ flex: 1, paddingRight: 15 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: COLORS.white, marginBottom: 4 }}>
+                Test Programı
+              </Text>
+              <Text style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.6)' }}>
+                Bu oyunu geliştirici test sürecine dahil etmek istiyorum.
+              </Text>
+            </View>
+            <Switch
+              value={isTestGame}
+              onValueChange={setIsTestGame}
+              trackColor={{ false: "rgba(255, 255, 255, 0.2)", true: COLORS.primary }}
+              thumbColor={isTestGame ? COLORS.white : "#f4f3f4"}
+            />
+          </View>
+        )}
+
         <Text style={styles.label}>{isGame ? 'Detaylı Açıklama *' : 'Açıklama *'}</Text>
         <TextInput style={[styles.input, { height: 120 }]} value={desc} onChangeText={setDesc} multiline textAlignVertical="top" />
         <Text style={styles.sectionTitle}>2. Görseller ve Dosyalar</Text>
-        
+
         <Text style={styles.label}>Kapak Görseli (Zorunlu) *</Text>
         <TouchableOpacity style={styles.filePickerBtn} onPress={pickCover}>
           {coverImage ? <Image source={{ uri: coverImage.uri }} style={styles.previewImage} /> : <Text style={styles.filePickerText}>🖼️ Kapak Resmi Seç</Text>}
@@ -768,7 +1121,7 @@ export default function PublishScreen() {
         <TouchableOpacity style={styles.filePickerBtn} onPress={pickGallery}>
           <Text style={styles.filePickerText}>📸 Galeri Görselleri Seç</Text>
         </TouchableOpacity>
-        
+
         {galleryImages.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
             {galleryImages.map((img, index) => (
@@ -814,7 +1167,7 @@ export default function PublishScreen() {
         <TouchableOpacity style={styles.publishBtn} onPress={handlePublish} disabled={loading}>
           {loading ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.publishBtnText}>{isGame ? 'OYUNU YAYIMLA' : 'ASSETİ YAYIMLA'}</Text>}
         </TouchableOpacity>
-        
+
         <View style={{ height: 60 }} />
       </ScrollView>
     </SafeAreaView>
@@ -829,10 +1182,10 @@ const styles = StyleSheet.create({
   scrollContent: { padding: SPACING.xl },
 
   sectionTitle: { color: COLORS.accentColor, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginTop: SPACING.xl, marginBottom: SPACING.lg },
-  
+
   label: { color: COLORS.white, fontWeight: 'bold', fontSize: 13, marginBottom: SPACING.sm, marginTop: SPACING.md },
   input: { backgroundColor: COLORS.cardBg, color: COLORS.white, padding: SPACING.md, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444' },
-  
+
   filePickerBtn: { backgroundColor: COLORS.cardBg, padding: SPACING.lg, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', height: 80 },
   filePickerText: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm },
   previewImage: { width: '100%', height: '100%', resizeMode: 'cover', borderRadius: RADIUS.sm },
@@ -858,7 +1211,7 @@ const styles = StyleSheet.create({
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, ActivityIndicator, Image, Alert, Modal, TextInput, Dimensions
+  TouchableOpacity, ActivityIndicator, Image, Alert, Modal, TextInput, Dimensions, FlatList, Switch
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -899,9 +1252,18 @@ export default function DashboardScreen() {
   const [editCoverImage, setEditCoverImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [editGalleryImages, setEditGalleryImages] = useState([]); 
-  const [newGalleryImages, setNewGalleryImages] = useState([]); 
+  const [editGalleryImages, setEditGalleryImages] = useState([]);
+  const [newGalleryImages, setNewGalleryImages] = useState([]);
   const [deletedGalleryIDs, setDeletedGalleryIDs] = useState([]);
+
+  // Test State'leri
+  const [testGames, setTestGames] = useState([]);
+  const [selectedTestGame, setSelectedTestGame] = useState(null);
+  const [testMedia, setTestMedia] = useState({ videos: [], images: [] });
+  const [mediaTab, setMediaTab] = useState('video'); // 'video' veya 'image'
+  const [mediaModalVisible, setMediaModalVisible] = useState(false);
+  const [testCenterVisible, setTestCenterVisible] = useState(false);
+  const [editIsTestGame, setEditIsTestGame] = useState(false);
 
   // ANA VERİLERİ ÇEK
   const fetchDashboardData = async () => {
@@ -913,15 +1275,17 @@ export default function DashboardScreen() {
       setUser(currentUser);
 
       const userID = currentUser.userID;
-      const [gamesRes, assetsRes, salesRes] = await Promise.all([
+      const [gamesRes, assetsRes, salesRes, testGamesRes] = await Promise.all([
         fetch(`${API_URL}/api/my-games/${userID}`),
         fetch(`${API_URL}/api/my-assets/${userID}`),
-        fetch(`${API_URL}/api/my-sales/${userID}`)
+        fetch(`${API_URL}/api/my-sales/${userID}`),
+        fetch(`${API_URL}/api/my-test-games/${userID}`) // Test oyunları da paralel çekiliyor
       ]);
 
       setMyGames(await gamesRes.json());
       setMyAssets(await assetsRes.json());
       setSales(await salesRes.json());
+      setTestGames(await testGamesRes.json());
     } catch (error) {
       console.error(error);
     } finally {
@@ -931,20 +1295,39 @@ export default function DashboardScreen() {
 
   useFocusEffect(useCallback(() => { fetchDashboardData(); }, []));
 
+  // TEST MEDYALARINI AÇ
+  const openTestMedia = async (game) => {
+    setSelectedTestGame(game);
+    setTestCenterVisible(false); // İlk modalı kapat
+    setTimeout(() => {
+      setMediaModalVisible(true); // Gecikmeli olarak medya modalını aç (Geçiş efekti için)
+      setMediaTab('video');
+    }, 400);
+
+    try {
+      const res = await fetch(`${API_URL}/api/test-media/${game.id}`);
+      const data = await res.json();
+      setTestMedia(data);
+    } catch (err) {
+      console.error("Medya çekilemedi", err);
+    }
+  };
+
   // SİLME İŞLEMİ
   const handleDelete = (type, id, name) => {
     Alert.alert("Emin misin?", `${name} kalıcı olarak silinecek.`, [
       { text: "İptal", style: "cancel" },
-      { text: "Sil", style: "destructive", onPress: async () => {
+      {
+        text: "Sil", style: "destructive", onPress: async () => {
           try {
             const res = await fetch(`${API_URL}/api/delete-item`, {
               method: 'DELETE', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ type, id })
             });
             const data = await res.json();
-            if(data.status === 'Success') { Alert.alert('Başarılı', 'Silindi.'); fetchDashboardData(); }
-          } catch(err) { Alert.alert('Hata', 'Silinemedi.'); }
-        } 
+            if (data.status === 'Success') { Alert.alert('Başarılı', 'Silindi.'); fetchDashboardData(); }
+          } catch (err) { Alert.alert('Hata', 'Silinemedi.'); }
+        }
       }
     ]);
   };
@@ -966,7 +1349,7 @@ export default function DashboardScreen() {
         grouped[date] = (grouped[date] || 0) + 1;
       });
 
-      const labels = Object.keys(grouped).length > 0 ? Object.keys(grouped).map(d => d.substring(0,5)) : ['Veri Yok'];
+      const labels = Object.keys(grouped).length > 0 ? Object.keys(grouped).map(d => d.substring(0, 5)) : ['Veri Yok'];
       const counts = Object.values(grouped).length > 0 ? Object.values(grouped) : [0];
 
       setChartData({ labels, datasets: [{ data: counts }] });
@@ -987,31 +1370,58 @@ export default function DashboardScreen() {
       const res = await fetch(`${API_URL}${endpoint}`);
       const data = await res.json();
       setItemComments(data);
-    } catch(err) { Alert.alert('Hata', 'Yorumlar alınamadı.'); }
+    } catch (err) { Alert.alert('Hata', 'Yorumlar alınamadı.'); }
   };
 
   // DÜZENLEME MODALINI AÇ VE GALERİ DETAYLARINI ÇEK
   const openEditModal = async (type, item) => {
     const id = type === 'Game' ? item.gamesID : item.assetID;
+    // Eğer oyun düzenleniyorsa, bu oyunun şu an test programında olup olmadığını kontrol et
+    if (type === 'Game') {
+      // testGames bir dizi değilse boş dizi [] olarak kabul et, çökmeyi engelle
+      const safeTestGames = Array.isArray(testGames) ? testGames : [];
+      // ID eşleşmesini hem id hem de gamesID ihtimaline karşı kontrol et
+      const isCurrentlyTest = safeTestGames.some(tg => (tg.id === id || tg.gamesID === id));
+      setEditIsTestGame(isCurrentlyTest);
+    } else {
+      setEditIsTestGame(false);
+    }
     setEditType(type);
     setEditId(id);
     setEditName(type === 'Game' ? item.gameName : item.assetName);
     setEditDesc(type === 'Game' ? item.gameDescription : item.assetDescription);
     setEditPrice((type === 'Game' ? item.gamePrice : item.assetPrice)?.toString() || '0');
-    setEditCoverImage(null); 
-    
+    setEditCoverImage(null);
+
     // Galeri state'lerini sıfırla
     setEditGalleryImages([]);
     setNewGalleryImages([]);
     setDeletedGalleryIDs([]);
-    
+
     setEditModalVisible(true);
 
     try {
       const res = await fetch(`${API_URL}/api/get-edit-details/${type}/${id}`);
       const data = await res.json();
-      if(data.galleryImages) setEditGalleryImages(data.galleryImages);
+      if (data.galleryImages) setEditGalleryImages(data.galleryImages);
     } catch (error) { console.error("Galeri çekilemedi", error); }
+  };
+
+  const handleTestGameToggle = (newValue) => {
+    if (!newValue) {
+      // true'dan false'a çekiliyorsa uyarı ver
+      Alert.alert(
+        "⚠️ Test Programından Çık",
+        "Oyunu test programından çıkarırsanız, oyuncuların gönderdiği tüm test videoları ve fotoğrafları kalıcı olarak silinecektir. Bu işlem geri alınamaz. Onaylıyor musunuz?",
+        [
+          { text: "İptal", style: "cancel", onPress: () => setEditIsTestGame(true) }, // Vazgeçerse switch'i geri true yap
+          { text: "Evet, Çıkar ve Sil", style: "destructive", onPress: () => setEditIsTestGame(false) }
+        ]
+      );
+    } else {
+      // false'tan true'ya çekiliyorsa direkt onayla
+      setEditIsTestGame(true);
+    }
   };
 
   // Resim Seçiciler
@@ -1021,17 +1431,16 @@ export default function DashboardScreen() {
   };
 
   const pickGalleryImages = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({ 
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, 
-      allowsMultipleSelection: true, 
-      quality: 0.8 
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8
     });
     if (!result.canceled) {
       setNewGalleryImages([...newGalleryImages, ...result.assets]);
     }
   };
 
-  // Galeri Yönetimi Silme İşlemleri
   const removeExistingGalleryImage = (imageID) => {
     setDeletedGalleryIDs([...deletedGalleryIDs, imageID]);
     setEditGalleryImages(editGalleryImages.filter(img => img.imageID !== imageID));
@@ -1053,6 +1462,9 @@ export default function DashboardScreen() {
       formData.append('name', editName);
       formData.append('description', editDesc);
       formData.append('price', editPrice);
+      if (editType === 'Game') {
+        formData.append('isTestGame', editIsTestGame ? 'true' : 'false');
+      }
 
       formData.append('deletedImageIDs', JSON.stringify(deletedGalleryIDs));
 
@@ -1080,7 +1492,7 @@ export default function DashboardScreen() {
         setEditModalVisible(false);
         fetchDashboardData();
       } else { Alert.alert('Hata', 'Kaydedilemedi.'); }
-    } catch (err) { Alert.alert('Hata', 'Sunucu bağlantı hatası.'); } 
+    } catch (err) { Alert.alert('Hata', 'Sunucu bağlantı hatası.'); }
     finally { setIsSaving(false); }
   };
 
@@ -1106,23 +1518,21 @@ export default function DashboardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* DOĞRU YERLEŞTİRİLMİŞ PROFİL KARTI VE BUTONLAR */}
+
         <View style={styles.profileCard}>
           <View style={styles.avatarCircle}><Text style={styles.avatarText}>{getInitial(user?.userName)}</Text></View>
           <Text style={styles.userName}>{user?.userName}</Text>
           <Text style={styles.userRole}>Geliştirici Hesabı</Text>
-          
-          {/* Eklenecek Yeni Butonlar */}
+
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ flex: 1, backgroundColor: 'rgba(233,69,96,0.15)', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: COLORS.accentColor, alignItems: 'center' }}
               onPress={() => router.push({ pathname: '/publish', params: { type: 'Game' } })}
             >
               <Text style={{ color: COLORS.accentColor, fontWeight: 'bold', fontSize: 12 }}>+ Oyun Yükle</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={{ flex: 1, backgroundColor: 'rgba(91,91,254,0.15)', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: '#5b5bfe', alignItems: 'center' }}
               onPress={() => router.push({ pathname: '/publish', params: { type: 'Asset' } })}
             >
@@ -1130,6 +1540,22 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* --- TEST MERKEZİ BUTONU --- */}
+        <TouchableOpacity
+          style={styles.testCenterBtn}
+          onPress={() => setTestCenterVisible(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 26, marginRight: 15 }}>🧪</Text>
+            <View>
+              <Text style={{ color: COLORS.white, fontSize: FONTS.sizes.md, fontWeight: 'bold' }}>Test Merkezi</Text>
+              <Text style={{ color: COLORS.mutedText, fontSize: FONTS.sizes.xs, marginTop: 2 }}>Oyun testlerini ve geri bildirimleri yönet</Text>
+            </View>
+          </View>
+          <Text style={{ color: COLORS.accentColor, fontWeight: 'bold', fontSize: 20 }}>→</Text>
+        </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Genel Performans</Text>
         <View style={styles.statsRow}>
@@ -1161,7 +1587,7 @@ export default function DashboardScreen() {
                 <Text style={styles.itemTitle}>{name}</Text>
                 <Text style={styles.itemPrice}>{price === 0 || !price ? 'Ücretsiz' : `₺${price}`}</Text>
               </View>
-              
+
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#5b5bfe' }]} onPress={() => openEditModal(type, item)}>
                   <Text style={styles.actionBtnText}>✏️ Düzenle</Text>
@@ -1170,7 +1596,7 @@ export default function DashboardScreen() {
                   <Text style={styles.actionBtnText}>🗑️ Sil</Text>
                 </TouchableOpacity>
               </View>
-              
+
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4caf50' }]} onPress={() => router.push({ pathname: '/detail', params: { id: id, type: type } })}>
                   <Text style={styles.actionBtnText}>👁️ Sayfayı Gör</Text>
@@ -1181,7 +1607,7 @@ export default function DashboardScreen() {
               </View>
 
               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#9b59b6', width: '100%' }]} onPress={() => openCommentsModal(type, item)}>
-                  <Text style={styles.actionBtnText}>💬 Yorumları Gör</Text>
+                <Text style={styles.actionBtnText}>💬 Yorumları Gör</Text>
               </TouchableOpacity>
             </View>
           );
@@ -1189,7 +1615,7 @@ export default function DashboardScreen() {
         <View style={{ height: 50 }} />
       </ScrollView>
 
-      {/* MODALLAR */}
+      {/* --- MEVCUT MODALLAR --- */}
       <Modal visible={commentsModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -1246,15 +1672,38 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => setEditModalVisible(false)}><Text style={styles.closeBtn}>✖</Text></TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-            
+
             <Text style={styles.label}>Ad</Text>
-            <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholderTextColor={COLORS.mutedText}/>
+            <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholderTextColor={COLORS.mutedText} />
+
+            {editType === 'Game' && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: SPACING.md, borderRadius: RADIUS.sm,
+                marginBottom: SPACING.md, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)'
+              }}>
+                <View style={{ flex: 1, paddingRight: 15 }}>
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: COLORS.white, marginBottom: 4 }}>
+                    Test Programı
+                  </Text>
+                  <Text style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.6)' }}>
+                    Test programını kapattığınız an tüm test verileri silinir.
+                  </Text>
+                </View>
+                <Switch
+                  value={editIsTestGame}
+                  onValueChange={handleTestGameToggle}
+                  trackColor={{ false: "rgba(255, 255, 255, 0.2)", true: COLORS.accentColor }}
+                  thumbColor={editIsTestGame ? COLORS.white : "#f4f3f4"}
+                />
+              </View>
+            )}
 
             <Text style={styles.label}>Açıklama</Text>
-            <TextInput style={[styles.input, { height: 100 }]} value={editDesc} onChangeText={setEditDesc} multiline textAlignVertical="top"/>
+            <TextInput style={[styles.input, { height: 100 }]} value={editDesc} onChangeText={setEditDesc} multiline textAlignVertical="top" />
 
             <Text style={styles.label}>Fiyat (₺)</Text>
-            <TextInput style={styles.input} value={editPrice} onChangeText={setEditPrice} keyboardType="numeric"/>
+            <TextInput style={styles.input} value={editPrice} onChangeText={setEditPrice} keyboardType="numeric" />
 
             <Text style={styles.label}>Kapak Görseli</Text>
             <TouchableOpacity style={styles.imagePickerBtn} onPress={pickCoverImage}>
@@ -1305,8 +1754,93 @@ export default function DashboardScreen() {
             <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit} disabled={isSaving}>
               {isSaving ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveBtnText}>Değişiklikleri Kaydet</Text>}
             </TouchableOpacity>
-            
-            <View style={{ height: 40 }}/>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* --- TEST MERKEZİ MODALI --- */}
+      <Modal visible={testCenterVisible} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Test Aşamasındaki Oyunlarım</Text>
+            <TouchableOpacity onPress={() => setTestCenterVisible(false)}>
+              <Text style={styles.closeBtn}>✖</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalBody}>
+            {testGames && testGames.length > 0 ? (
+              testGames.map((item) => (
+                <View key={item.id} style={[styles.itemCard, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <Image
+                    source={{ uri: item.gameCover ? `${API_URL}/uploads/${item.gameCover}` : 'https://via.placeholder.com/150' }}
+                    style={{ width: 70, height: 70, borderRadius: RADIUS.md, marginRight: SPACING.md }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemTitle} numberOfLines={1}>{item.gameName}</Text>
+                    <Text style={{ color: COLORS.accentColor, fontSize: 12, fontWeight: 'bold' }}>Test Süreci Aktif</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={{ backgroundColor: COLORS.accentColor, paddingHorizontal: 15, paddingVertical: 10, borderRadius: RADIUS.sm }}
+                    onPress={() => openTestMedia(item)}
+                  >
+                    <Text style={{ color: COLORS.white, fontWeight: 'bold', fontSize: 12 }}>İncele</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>Şu an test programında olan bir oyununuz bulunmuyor.</Text>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* --- TEST MEDYALARI MODALI --- */}
+      <Modal visible={mediaModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              {selectedTestGame?.gameName} - Medyalar
+            </Text>
+            <TouchableOpacity onPress={() => setMediaModalVisible(false)}>
+              <Text style={styles.closeBtn}>✖</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg }}>
+            <View style={styles.tabContainer}>
+              <TouchableOpacity style={[styles.tabBtn, mediaTab === 'video' && styles.tabBtnActive]} onPress={() => setMediaTab('video')}>
+                <Text style={[styles.tabText, mediaTab === 'video' && styles.tabTextActive]}>Videolar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.tabBtn, mediaTab === 'image' && styles.tabBtnActive]} onPress={() => setMediaTab('image')}>
+                <Text style={[styles.tabText, mediaTab === 'image' && styles.tabTextActive]}>Fotoğraflar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView style={styles.modalBody}>
+            {mediaTab === 'video' ? (
+              testMedia.videos.length > 0 ? (
+                testMedia.videos.map(v => (
+                  <View key={v.id} style={styles.commentBox}>
+                    <Text style={styles.commentText}>🎥 {v.videoPath}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Henüz test videosu gönderilmemiş.</Text>
+              )
+            ) : (
+              testMedia.images.length > 0 ? (
+                testMedia.images.map(img => (
+                  <View key={img.id} style={styles.commentBox}>
+                    <Text style={styles.commentText}>🖼️ {img.imagePath}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Henüz test fotoğrafı gönderilmemiş.</Text>
+              )
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1324,11 +1858,24 @@ const styles = StyleSheet.create({
   headerTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   scrollContent: { padding: SPACING.xl },
 
-  profileCard: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.xxl, borderWidth: 1, borderColor: '#333' },
+  profileCard: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.xl, borderWidth: 1, borderColor: '#333' },
   avatarCircle: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: COLORS.accentColor, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, backgroundColor: 'rgba(233,69,96,0.1)' },
   avatarText: { color: COLORS.accentColor, fontSize: 32, fontWeight: 'bold' },
   userName: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: 4 },
   userRole: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm },
+
+  // Test Merkezi Butonu İçin Yeni Stil
+  testCenterBtn: {
+    backgroundColor: 'rgba(233,69,96,0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.accentColor,
+    marginBottom: SPACING.xl
+  },
 
   sectionTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: SPACING.md },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.xxl },
@@ -1349,7 +1896,7 @@ const styles = StyleSheet.create({
   itemInfo: { marginBottom: SPACING.lg },
   itemTitle: { color: COLORS.white, fontSize: FONTS.sizes.md, fontWeight: 'bold', marginBottom: 4 },
   itemPrice: { color: COLORS.accentColor, fontSize: FONTS.sizes.sm, fontWeight: 'bold' },
-  
+
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACING.md, marginBottom: SPACING.md },
   actionBtn: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.sm, alignItems: 'center' },
   actionBtnText: { color: COLORS.white, fontSize: FONTS.sizes.sm, fontWeight: 'bold' },
@@ -1361,7 +1908,7 @@ const styles = StyleSheet.create({
   modalTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   closeBtn: { color: COLORS.accentColor, fontSize: 24, fontWeight: 'bold' },
   modalBody: { padding: SPACING.xl },
-  
+
   // Grafik
   chartWrapper: { backgroundColor: COLORS.cardBg, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.accentColor, marginBottom: SPACING.xl },
   chartTitle: { color: COLORS.white, textAlign: 'center', marginBottom: SPACING.md, fontWeight: 'bold' },
@@ -2092,17 +2639,17 @@ const deleteFileFromStorage = (filename) => {
 app.get('/', (req, res) => res.json("Backend Çalışıyor!"));
 
 app.get('/game-types', (req, res) => {
-    const sql = "SELECT * FROM gametypes"; 
+    const sql = "SELECT * FROM gametypes";
     db.query(sql, (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
 
 app.get('/asset-types', (req, res) => {
-    const sql = "SELECT * FROM assettypes"; 
+    const sql = "SELECT * FROM assettypes";
     db.query(sql, (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
@@ -2175,11 +2722,11 @@ app.get('/games/:id', (req, res) => {
     `;
     const sqlImages = `SELECT image FROM GameImages WHERE gameID = ?`;
     db.query(sqlGame, [req.params.id], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         if (data.length === 0) return res.status(404).json({ message: "Oyun bulunamadı" });
         const gameData = data[0];
         db.query(sqlImages, [req.params.id], (err2, imagesData) => {
-            if(err2) { gameData.galleryImages = []; return res.json(gameData); }
+            if (err2) { gameData.galleryImages = []; return res.json(gameData); }
             gameData.galleryImages = imagesData.map(img => img.image);
             return res.json(gameData);
         });
@@ -2200,51 +2747,68 @@ app.get('/assets/:id', (req, res) => {
     `;
     const sqlImages = `SELECT image FROM AssetImages WHERE assetID = ?`;
     db.query(sql, [req.params.id], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         if (data.length === 0) return res.status(404).json({ message: "Asset bulunamadı" });
         const assetData = data[0];
         db.query(sqlImages, [req.params.id], (err2, imagesData) => {
-            if(err2) { assetData.galleryImages = []; return res.json(assetData); }
+            if (err2) { assetData.galleryImages = []; return res.json(assetData); }
             assetData.galleryImages = imagesData.map(img => img.image);
             return res.json(assetData);
         });
     });
 });
 
-// EKLEME İŞLEMLERİ
 app.post('/api/add-game', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'gameFile', maxCount: 1 }, { name: 'galleryImages', maxCount: 10 }]), (req, res) => {
-    const { gameName, gameDescription, gamePrice, gameTypes, userID } = req.body; 
+    // isTestGame değerini req.body'den çıkarıyoruz
+    const { gameName, gameDescription, gamePrice, gameTypes, userID, isTestGame } = req.body;
     const coverImage = req.files['coverImage'] ? req.files['coverImage'][0].filename : null;
     const gameFile = req.files['gameFile'] ? req.files['gameFile'][0].filename : null;
-    const galleryImages = req.files['galleryImages'] || []; 
-    let typeIDs = []; try { typeIDs = JSON.parse(gameTypes); } catch (e) {}
+    const galleryImages = req.files['galleryImages'] || [];
+    let typeIDs = []; try { typeIDs = JSON.parse(gameTypes); } catch (e) { }
 
     db.beginTransaction((err) => {
         if (err) return res.status(500).json(err);
+
         const sqlGame = "INSERT INTO Games (`gameName`, `gameDescription`, `gamePrice`, `gameImage`, `gameFile`) VALUES (?)";
         db.query(sqlGame, [[gameName, gameDescription, gamePrice, coverImage, gameFile]], (err, result) => {
-            if (err) return db.rollback(() => res.status(500).json({error: err.message}));
+            // 1. Önce hatayı kontrol et (Sistem çökmesini engeller)
+            if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+
             const newID = result.insertId;
+
+            // 2. Eğer oyun eklendiyse ve Test Oyunu ise TestGames tablosuna yaz
+            if (isTestGame === 'true') {
+                db.query("INSERT INTO TestGames (gameId) VALUES (?)", [newID], (testErr) => {
+                    if (testErr) console.error("Test game eklenemedi: ", testErr);
+                });
+            }
+
             const sqlRel = "INSERT INTO UserGameDevelops (`user`, `game`) VALUES (?, ?)";
             db.query(sqlRel, [userID, newID], (err) => {
-                if (err) return db.rollback(() => res.status(500).json({error: err.message}));
+                if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+
                 const addCategories = (callback) => {
                     if (typeIDs.length > 0) {
-                        const typeValues = typeIDs.map(id => [newID, id]); 
+                        const typeValues = typeIDs.map(id => [newID, id]);
                         db.query("INSERT INTO gametypes_game (`game`, `gameType`) VALUES ?", [typeValues], callback);
                     } else callback(null);
                 };
+
                 const addGalleryImages = (callback) => {
                     if (galleryImages.length > 0) {
                         const imageValues = galleryImages.map(file => [newID, file.filename]);
                         db.query("INSERT INTO GameImages (`gameID`, `image`) VALUES ?", [imageValues], callback);
-                    } else callback(null); 
+                    } else callback(null);
                 };
+
                 addCategories((err) => {
-                    if (err) return db.rollback(() => res.status(500).json({error: err.message}));
+                    if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
                     addGalleryImages((err) => {
-                        if (err) return db.rollback(() => res.status(500).json({error: err.message}));
-                        db.commit((err) => { if(err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Oyun ve görseller başarıyla yüklendi!" }); });
+                        if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+                        db.commit((err) => {
+                            if (err) return db.rollback(() => res.status(500).json(err));
+                            res.json({ status: "Success", message: "Oyun ve görseller başarıyla yüklendi!" });
+                        });
                     });
                 });
             });
@@ -2252,22 +2816,82 @@ app.post('/api/add-game', upload.fields([{ name: 'coverImage', maxCount: 1 }, { 
     });
 });
 
+// --- 1. KÜTÜPHANEM (OYUNCU) API'Sİ ---
+app.get('/api/my-library/:userId', (req, res) => {
+    const userId = req.params.userId;
+
+    const gameQuery = `
+    SELECT g.gamesID as itemID, g.gameName as itemName, g.gameImage as itemImage, 'Game' as itemType,
+           IF(tg.id IS NOT NULL, 1, 0) as isTestGame 
+    FROM userbygame ubg
+    JOIN Games g ON ubg.game = g.gamesID
+    LEFT JOIN TestGames tg ON g.gamesID = tg.gameId
+    WHERE ubg.user = ?
+    ORDER BY ubg.purchaseDate DESC
+  `;
+
+    const assetQuery = `
+    SELECT a.assetID as itemID, a.assetName as itemName, a.assetImage as itemImage, 'Asset' as itemType,
+           0 as isTestGame 
+    FROM userbyasset uba
+    JOIN Assets a ON uba.asset = a.assetID
+    WHERE uba.user = ?
+    ORDER BY uba.purchaseDate DESC
+  `;
+
+    // Oyunları ve Assetleri paralel çekip tek bir JSON objesinde dönüyoruz
+    db.query(gameQuery, [userId], (err, games) => {
+        if (err) return res.status(500).json({ error: err.message });
+        db.query(assetQuery, [userId], (err, assets) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ games: games, assets: assets });
+        });
+    });
+});
+// --- 2. TEST MEDYASI YÜKLEME API'Sİ ---
+// Test dosyaları için Multer ayarı (Fotoğraflar ve Videolar için)
+const testMediaStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => cb(null, 'test-media-' + Date.now() + path.extname(file.originalname))
+});
+const uploadTestMedia = multer({ storage: testMediaStorage });
+
+app.post('/api/upload-test-media', uploadTestMedia.single('mediaFile'), (req, res) => {
+    const { gameId, userId, mediaType } = req.body; // mediaType: 'video' veya 'image'
+    const filePath = req.file ? req.file.filename : null;
+
+    if (!filePath) return res.status(400).json({ error: 'Medya dosyası alınamadı.' });
+
+    const table = mediaType === 'video' ? 'TestVideos' : 'TestImages';
+    const column = mediaType === 'video' ? 'videoPath' : 'imagePath';
+
+    const query = `INSERT INTO ${table} (gameId, userId, ${column}) VALUES (?, ?, ?)`;
+
+    db.query(query, [gameId, userId, filePath], (err, result) => {
+        if (err) {
+            console.error("Test medyası veritabanına eklenemedi:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ status: "Success", message: "Test geri bildiriminiz başarıyla gönderildi!" });
+    });
+});
+
 app.post('/api/add-asset', upload.fields([{ name: 'coverImage', maxCount: 1 }, { name: 'assetFile', maxCount: 1 }, { name: 'galleryImages', maxCount: 10 }]), (req, res) => {
     const { assetName, assetDescription, assetPrice, assetTypes, userID } = req.body;
     const assetImage = req.files['coverImage'] ? req.files['coverImage'][0].filename : null;
     const assetFile = req.files['assetFile'] ? req.files['assetFile'][0].filename : null;
-    const galleryImages = req.files['galleryImages'] || []; 
-    let typeIDs = []; try { typeIDs = JSON.parse(assetTypes); } catch (e) {}
+    const galleryImages = req.files['galleryImages'] || [];
+    let typeIDs = []; try { typeIDs = JSON.parse(assetTypes); } catch (e) { }
 
     db.beginTransaction((err) => {
         if (err) return res.status(500).json(err);
         const sql = "INSERT INTO Assets (`assetName`, `assetDescription`, `assetPrice`, `assetImage`, `assetFile`) VALUES (?)";
         db.query(sql, [[assetName, assetDescription, assetPrice, assetImage, assetFile]], (err, result) => {
-            if (err) return db.rollback(() => res.status(500).json({error: err.message}));
+            if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
             const newID = result.insertId;
             const sqlRel = "INSERT INTO UserAssetDevelops (`user`, `asset`) VALUES (?, ?)";
             db.query(sqlRel, [userID, newID], (err) => {
-                if (err) return db.rollback(() => res.status(500).json({error: err.message}));
+                if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
                 const addCategories = (callback) => {
                     if (typeIDs.length > 0) {
                         const typeValues = typeIDs.map(id => [newID, id]);
@@ -2281,10 +2905,10 @@ app.post('/api/add-asset', upload.fields([{ name: 'coverImage', maxCount: 1 }, {
                     } else callback(null);
                 };
                 addCategories((err) => {
-                    if (err) return db.rollback(() => res.status(500).json({error: err.message}));
+                    if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
                     addGalleryImages((err) => {
-                        if (err) return db.rollback(() => res.status(500).json({error: err.message}));
-                        db.commit((err) => { if(err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Asset ve görseller başarıyla yüklendi!" }); });
+                        if (err) return db.rollback(() => res.status(500).json({ error: err.message }));
+                        db.commit((err) => { if (err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Asset ve görseller başarıyla yüklendi!" }); });
                     });
                 });
             });
@@ -2296,8 +2920,8 @@ app.post('/api/add-asset', upload.fields([{ name: 'coverImage', maxCount: 1 }, {
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
     db.query("SELECT * FROM User WHERE (userMail = ? OR userName = ?) AND userPassword = ?", [email, email, password], (err, data) => {
-        if(err) return res.status(500).json("Hata");
-        if(data.length > 0) return res.json({ status: "Success", user: data[0] });
+        if (err) return res.status(500).json("Hata");
+        if (data.length > 0) return res.json({ status: "Success", user: data[0] });
         return res.status(401).json({ status: "Error", message: "Hatalı bilgi" });
     });
 });
@@ -2305,7 +2929,7 @@ app.post('/login', (req, res) => {
 app.post('/register', (req, res) => {
     const { username, email, password } = req.body;
     db.query("INSERT INTO User (`userName`, `userMail`, `userPassword`) VALUES (?)", [[username, email, password]], (err) => {
-        if(err) return res.status(500).json({ status: "Error" });
+        if (err) return res.status(500).json({ status: "Error" });
         return res.json({ status: "Success" });
     });
 });
@@ -2314,14 +2938,14 @@ app.post('/register', (req, res) => {
 app.get('/api/my-games/:userID', (req, res) => {
     const sql = `SELECT Games.* FROM Games JOIN UserGameDevelops ON Games.gamesID = UserGameDevelops.game WHERE UserGameDevelops.user = ?`;
     db.query(sql, [req.params.userID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
 app.get('/api/my-assets/:userID', (req, res) => {
     const sql = `SELECT Assets.* FROM Assets JOIN UserAssetDevelops ON Assets.assetID = UserAssetDevelops.asset WHERE UserAssetDevelops.user = ?`;
     db.query(sql, [req.params.userID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
@@ -2332,7 +2956,7 @@ app.get('/api/my-sales/:userID', (req, res) => {
         UNION ALL
         SELECT 'Asset' as itemType, A.assetName as itemName, A.assetPrice as price, U.userName as buyerName, UBA.purchaseDate as saleDate FROM UserByAsset UBA JOIN Assets A ON UBA.asset = A.assetID JOIN UserAssetDevelops UAD ON A.assetID = UAD.asset JOIN User U ON UBA.user = U.userID WHERE UAD.user = ? ORDER BY saleDate DESC`;
     db.query(sql, [sellerID, sellerID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
@@ -2364,16 +2988,16 @@ app.delete('/api/delete-gallery-image', (req, res) => {
 
 // 3. GELİŞMİŞ GÜNCELLEME (Text + Kapak + Yeni Galeri + SİLİNECEK GALERİ)
 app.put('/api/update-item', upload.fields([
-    { name: 'coverImage', maxCount: 1 }, 
+    { name: 'coverImage', maxCount: 1 },
     { name: 'newGalleryImages', maxCount: 10 }
 ]), (req, res) => {
-    const { type, id, name, description, price, deletedImageIDs } = req.body;
-    
+    const { type, id, name, description, price, deletedImageIDs, isTestGame } = req.body;
+
     // Yeni dosyalar
     const newCover = req.files['coverImage'] ? req.files['coverImage'][0].filename : null;
     const newGallery = req.files['newGalleryImages'] || [];
 
-    // Silinecek ID'leri parse et (Frontend'den JSON string olarak gelir)
+    // Silinecek ID'leri parse et
     let idsToDelete = [];
     try {
         idsToDelete = JSON.parse(deletedImageIDs || "[]");
@@ -2391,7 +3015,7 @@ app.put('/api/update-item', upload.fields([
         if (type === 'Game') {
             if (newCover) {
                 db.query("SELECT gameImage FROM Games WHERE gamesID = ?", [id], (err, resImg) => {
-                    if (resImg.length > 0) deleteFileFromStorage(resImg[0].gameImage);
+                    if (resImg && resImg.length > 0) deleteFileFromStorage(resImg[0].gameImage);
                 });
                 sqlUpdate = "UPDATE Games SET gameName=?, gameDescription=?, gamePrice=?, gameImage=? WHERE gamesID=?";
                 params.push(newCover);
@@ -2402,7 +3026,7 @@ app.put('/api/update-item', upload.fields([
             // Asset
             if (newCover) {
                 db.query("SELECT assetImage FROM Assets WHERE assetID = ?", [id], (err, resImg) => {
-                    if (resImg.length > 0) deleteFileFromStorage(resImg[0].assetImage);
+                    if (resImg && resImg.length > 0) deleteFileFromStorage(resImg[0].assetImage);
                 });
                 sqlUpdate = "UPDATE Assets SET assetName=?, assetDescription=?, assetPrice=?, assetImage=? WHERE assetID=?";
                 params.push(newCover);
@@ -2415,25 +3039,21 @@ app.put('/api/update-item', upload.fields([
         db.query(sqlUpdate, params, (err) => {
             if (err) return db.rollback(() => res.status(500).json(err));
 
-            // 2. SİLİNMESİ İSTENEN GALERİ RESİMLERİNİ SİL (YENİ EKLENEN KISIM)
+            // 2. SİLİNMESİ İSTENEN GALERİ RESİMLERİNİ SİL
             const processDeletions = (callback) => {
                 if (idsToDelete.length > 0) {
-                    // Önce dosya adlarını bulup diskten silelim
-                    let sqlFind = type === 'Game' 
+                    let sqlFind = type === 'Game'
                         ? `SELECT image FROM GameImages WHERE imageID IN (?)`
                         : `SELECT image FROM AssetImages WHERE imageID IN (?)`;
-                    
+
                     db.query(sqlFind, [idsToDelete], (errFind, results) => {
                         if (errFind) return callback(errFind);
-                        
-                        // Dosyaları diskten sil
                         results.forEach(img => deleteFileFromStorage(img.image));
 
-                        // Veritabanından sil
                         let sqlDel = type === 'Game'
                             ? `DELETE FROM GameImages WHERE imageID IN (?)`
                             : `DELETE FROM AssetImages WHERE imageID IN (?)`;
-                        
+
                         db.query(sqlDel, [idsToDelete], callback);
                     });
                 } else {
@@ -2441,30 +3061,51 @@ app.put('/api/update-item', upload.fields([
                 }
             };
 
-            // 3. YENİ GALERİ RESİMLERİNİ EKLE
+            // 3. TEST PROGRAMI DURUMUNU GÜNCELLE
+            const processTestProgram = (callback) => {
+                if (type === 'Game' && isTestGame !== undefined) {
+                    if (isTestGame === 'true') {
+                        db.query("INSERT IGNORE INTO TestGames (gameId) VALUES (?)", [id], callback);
+                    } else {
+                        // Önce medyaları temizle, sonra test kaydını sil
+                        db.query("DELETE FROM TestVideos WHERE gameId = ?", [id], () => {
+                            db.query("DELETE FROM TestImages WHERE gameId = ?", [id], () => {
+                                db.query("DELETE FROM TestGames WHERE gameId = ?", [id], callback);
+                            });
+                        });
+                    }
+                } else {
+                    callback(null);
+                }
+            };
+
+            // 4. YENİ GALERİ RESİMLERİNİ EKLE
             const addGallery = (callback) => {
                 if (newGallery.length > 0) {
                     const values = newGallery.map(file => [id, file.filename]);
-                    let sqlInsert = type === 'Game' 
+                    let sqlInsert = type === 'Game'
                         ? "INSERT INTO GameImages (gameID, image) VALUES ?"
                         : "INSERT INTO AssetImages (assetID, image) VALUES ?";
-                    
                     db.query(sqlInsert, [values], callback);
                 } else {
                     callback(null);
                 }
             };
 
-            // Zincirleme İşlemler: Silme -> Ekleme -> Commit
+            // ZİNCİRLEME İŞLEMLER
             processDeletions((err) => {
-                if (err) return db.rollback(() => res.status(500).json({error: "Silme hatası"}));
-                
-                addGallery((err) => {
-                    if (err) return db.rollback(() => res.status(500).json({error: "Ekleme hatası"}));
-                    
-                    db.commit((err) => {
-                        if (err) return db.rollback(() => res.status(500).json(err));
-                        res.json({ status: "Success", message: "Güncelleme başarılı!" });
+                if (err) return db.rollback(() => res.status(500).json({ error: "Silme hatası" }));
+
+                processTestProgram((err) => {
+                    if (err) return db.rollback(() => res.status(500).json({ error: "Test programı hatası" }));
+
+                    addGallery((err) => {
+                        if (err) return db.rollback(() => res.status(500).json({ error: "Ekleme hatası" }));
+
+                        db.commit((err) => {
+                            if (err) return db.rollback(() => res.status(500).json(err));
+                            res.json({ status: "Success", message: "Güncelleme başarılı!" });
+                        });
                     });
                 });
             });
@@ -2475,11 +3116,11 @@ app.put('/api/update-item', upload.fields([
 app.delete('/api/delete-item', (req, res) => {
     const { type, id } = req.body;
     db.beginTransaction((err) => {
-        if(err) return res.status(500).json(err);
-        
+        if (err) return res.status(500).json(err);
+
         // 1. ÖNCE DOSYA İSİMLERİNİ ÇEK VE SİL (Sistem Temizliği)
-        let sqlGetFiles = type === 'Game' 
-            ? "SELECT gameImage as cover, gameFile as file FROM Games WHERE gamesID = ?; SELECT image FROM GameImages WHERE gameID = ?" 
+        let sqlGetFiles = type === 'Game'
+            ? "SELECT gameImage as cover, gameFile as file FROM Games WHERE gamesID = ?; SELECT image FROM GameImages WHERE gameID = ?"
             : "SELECT assetImage as cover, assetFile as file FROM Assets WHERE assetID = ?; SELECT image FROM AssetImages WHERE assetID = ?";
 
         db.query(sqlGetFiles, [id, id], (err, results) => {
@@ -2490,18 +3131,18 @@ app.delete('/api/delete-item', (req, res) => {
             if (galleryImages.length > 0) galleryImages.forEach(img => deleteFileFromStorage(img.image));
 
             // 2. VERİTABANI SİLME İŞLEMLERİ
-            if(type === 'Game') {
+            if (type === 'Game') {
                 db.query("DELETE FROM gametypes_game WHERE game = ?", [id], (err) => {
-                    if(err) return db.rollback(() => res.status(500).json(err));
+                    if (err) return db.rollback(() => res.status(500).json(err));
                     db.query("DELETE FROM UserGameDevelops WHERE game = ?", [id], (err) => {
-                        if(err) return db.rollback(() => res.status(500).json(err));
+                        if (err) return db.rollback(() => res.status(500).json(err));
                         db.query("DELETE FROM UserByGame WHERE game = ?", [id], (err) => {
-                            if(err) return db.rollback(() => res.status(500).json(err));
+                            if (err) return db.rollback(() => res.status(500).json(err));
                             db.query("DELETE FROM GameImages WHERE gameID = ?", [id], (err) => {
-                                if(err) return db.rollback(() => res.status(500).json(err));
+                                if (err) return db.rollback(() => res.status(500).json(err));
                                 db.query("DELETE FROM Games WHERE gamesID = ?", [id], (err) => {
-                                    if(err) return db.rollback(() => res.status(500).json(err));
-                                    db.commit((err) => { if(err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Oyun silindi." }); });
+                                    if (err) return db.rollback(() => res.status(500).json(err));
+                                    db.commit((err) => { if (err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Oyun silindi." }); });
                                 });
                             });
                         });
@@ -2509,16 +3150,16 @@ app.delete('/api/delete-item', (req, res) => {
                 });
             } else if (type === 'Asset') {
                 db.query("DELETE FROM assettypes_asset WHERE asset = ?", [id], (err) => {
-                    if(err) return db.rollback(() => res.status(500).json(err));
+                    if (err) return db.rollback(() => res.status(500).json(err));
                     db.query("DELETE FROM UserAssetDevelops WHERE asset = ?", [id], (err) => {
-                        if(err) return db.rollback(() => res.status(500).json(err));
+                        if (err) return db.rollback(() => res.status(500).json(err));
                         db.query("DELETE FROM UserByAsset WHERE asset = ?", [id], (err) => {
-                            if(err) return db.rollback(() => res.status(500).json(err));
+                            if (err) return db.rollback(() => res.status(500).json(err));
                             db.query("DELETE FROM AssetImages WHERE assetID = ?", [id], (err) => {
-                                if(err) return db.rollback(() => res.status(500).json(err));
+                                if (err) return db.rollback(() => res.status(500).json(err));
                                 db.query("DELETE FROM Assets WHERE assetID = ?", [id], (err) => {
-                                    if(err) return db.rollback(() => res.status(500).json(err));
-                                    db.commit((err) => { if(err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Asset silindi." }); });
+                                    if (err) return db.rollback(() => res.status(500).json(err));
+                                    db.commit((err) => { if (err) return db.rollback(() => res.status(500).json(err)); res.json({ status: "Success", message: "Asset silindi." }); });
                                 });
                             });
                         });
@@ -2532,8 +3173,35 @@ app.delete('/api/delete-item', (req, res) => {
 app.get('/api/game-comments/:gameID', (req, res) => {
     const sql = `SELECT GC.*, U.userName FROM GameComments GC JOIN User U ON GC.userID = U.userID WHERE GC.gameID = ? ORDER BY GC.commentDate DESC`;
     db.query(sql, [req.params.gameID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
+    });
+});
+
+
+// --- ANA SAYFA İÇİN TÜM OYUNLARI GETİR ---
+app.get('/api/games', (req, res) => {
+    // Veritabanındaki tüm oyunları en son eklenenden (DESC) en eskiye doğru çeker
+    const query = "SELECT * FROM Games ORDER BY gamesID DESC";
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Oyunlar çekilirken hata:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
+    });
+});
+
+// --- ANA SAYFA İÇİN TÜM ASSETLERİ GETİR ---
+app.get('/api/assets', (req, res) => {
+    // Veritabanındaki tüm assetleri en son eklenenden (DESC) en eskiye doğru çeker
+    const query = "SELECT * FROM Assets ORDER BY assetID DESC";
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Assetler çekilirken hata:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
     });
 });
 
@@ -2541,7 +3209,7 @@ app.post('/api/add-game-comment', (req, res) => {
     const { gameID, userID, commentText } = req.body;
     const sql = "INSERT INTO GameComments (gameID, userID, commentText) VALUES (?, ?, ?)";
     db.query(sql, [gameID, userID, commentText], (err, result) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json({ status: "Success", message: "Yorum eklendi" });
     });
 });
@@ -2549,7 +3217,7 @@ app.post('/api/add-game-comment', (req, res) => {
 app.get('/api/asset-comments/:assetID', (req, res) => {
     const sql = `SELECT AC.*, U.userName FROM AssetComments AC JOIN User U ON AC.userID = U.userID WHERE AC.assetID = ? ORDER BY AC.commentDate DESC`;
     db.query(sql, [req.params.assetID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
@@ -2558,26 +3226,54 @@ app.post('/api/add-asset-comment', (req, res) => {
     const { assetID, userID, commentText } = req.body;
     const sql = "INSERT INTO AssetComments (assetID, userID, commentText) VALUES (?, ?, ?)";
     db.query(sql, [assetID, userID, commentText], (err, result) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json({ status: "Success", message: "Yorum eklendi" });
     });
 });
 
 app.post('/api/buy-game', (req, res) => {
     const { userID, gameID, price } = req.body;
-    const sql = "INSERT INTO userbygame (user, game, price, purchaseDate) VALUES (?, ?, ?, NOW())";
-    db.query(sql, [userID, gameID, price], (err, result) => {
-        if (err) return res.status(500).json({ status: "Error", message: err.message });
-        return res.json({ status: "Success", message: "Oyun kütüphaneye eklendi." });
+
+    // 1. Kendi oyunu mu kontrolü
+    db.query("SELECT * FROM UserGameDevelops WHERE user = ? AND game = ?", [userID, gameID], (err, devRes) => {
+        if (err) return res.status(500).json({ message: "Sunucu hatası." });
+        if (devRes.length > 0) return res.status(400).json({ message: "Kendi geliştirdiğiniz oyunu satın alamazsınız." });
+
+        // 2. Zaten kütüphanede var mı kontrolü
+        db.query("SELECT * FROM userbygame WHERE user = ? AND game = ?", [userID, gameID], (err, libRes) => {
+            if (err) return res.status(500).json({ message: "Sunucu hatası." });
+            if (libRes.length > 0) return res.status(400).json({ message: "Bu oyun zaten kütüphanenizde mevcut." });
+
+            // 3. Satın almayı gerçekleştir
+            const sql = "INSERT INTO userbygame (user, game, price, purchaseDate) VALUES (?, ?, ?, NOW())";
+            db.query(sql, [userID, gameID, price], (err, result) => {
+                if (err) return res.status(500).json({ message: err.message });
+                return res.json({ status: "Success", message: "Oyun kütüphaneye eklendi." });
+            });
+        });
     });
 });
 
 app.post('/api/buy-asset', (req, res) => {
     const { userID, assetID, price } = req.body;
-    const sql = "INSERT INTO userbyasset (user, asset, price, purchaseDate) VALUES (?, ?, ?, NOW())";
-    db.query(sql, [userID, assetID, price], (err, result) => {
-        if (err) return res.status(500).json({ status: "Error", message: err.message });
-        return res.json({ status: "Success", message: "Asset kütüphaneye eklendi." });
+
+    // 1. Kendi asseti mi kontrolü
+    db.query("SELECT * FROM UserAssetDevelops WHERE user = ? AND asset = ?", [userID, assetID], (err, devRes) => {
+        if (err) return res.status(500).json({ message: "Sunucu hatası." });
+        if (devRes.length > 0) return res.status(400).json({ message: "Kendi geliştirdiğiniz asseti satın alamazsınız." });
+
+        // 2. Zaten kütüphanede var mı kontrolü
+        db.query("SELECT * FROM userbyasset WHERE user = ? AND asset = ?", [userID, assetID], (err, libRes) => {
+            if (err) return res.status(500).json({ message: "Sunucu hatası." });
+            if (libRes.length > 0) return res.status(400).json({ message: "Bu asset zaten kütüphanenizde mevcut." });
+
+            // 3. Satın almayı gerçekleştir
+            const sql = "INSERT INTO userbyasset (user, asset, price, purchaseDate) VALUES (?, ?, ?, NOW())";
+            db.query(sql, [userID, assetID, price], (err, result) => {
+                if (err) return res.status(500).json({ message: err.message });
+                return res.json({ status: "Success", message: "Asset kütüphaneye eklendi." });
+            });
+        });
     });
 });
 
@@ -2593,7 +3289,7 @@ app.get('/api/dashboard-stats/:userID', (req, res) => {
         GROUP BY saleDate ORDER BY saleDate ASC
     `;
     db.query(sql, [userID, userID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
@@ -2607,7 +3303,7 @@ app.get('/api/item-sales-details', (req, res) => {
         sql = `SELECT U.userName as buyerName, UBA.purchaseDate, UBA.price FROM userbyasset UBA JOIN user U ON UBA.user = U.userID WHERE UBA.asset = ? ORDER BY UBA.purchaseDate DESC`;
     }
     db.query(sql, [id], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
     });
 });
@@ -2622,8 +3318,49 @@ app.get('/api/publisher-total-stats/:userID', (req, res) => {
         FROM assets A JOIN userassetdevelops UAD ON A.assetID = UAD.asset WHERE UAD.user = ?
     `;
     db.query(sql, [userID, userID], (err, data) => {
-        if(err) return res.status(500).json(err);
+        if (err) return res.status(500).json(err);
         return res.json(data);
+    });
+});
+
+
+// Dashboard'da kullanıcının "Test Programındaki" oyunlarını getiren API
+app.get('/api/my-test-games/:userId', (req, res) => {
+    const userId = req.params.userId;
+    const query = `
+    SELECT g.gamesID as id, g.gameName, g.gameImage as gameCover 
+    FROM Games g
+    JOIN TestGames tg ON g.gamesID = tg.gameId
+    JOIN UserGameDevelops ugd ON g.gamesID = ugd.game
+    WHERE ugd.user = ?
+  `;
+    db.query(query, [userId], (err, results) => {
+        if (err) {
+            console.error("Test oyunları çekilirken hata:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
+    });
+});
+
+// 2. Belirli bir test oyununun Video ve Fotoğraflarını getiren API
+app.get('/api/test-media/:gameId', (req, res) => {
+    const gameId = req.params.gameId;
+
+    const videoQuery = "SELECT id, videoPath, createdAt FROM TestVideos WHERE gameId = ?";
+    const imageQuery = "SELECT id, imagePath, createdAt FROM TestImages WHERE gameId = ?";
+
+    db.query(videoQuery, [gameId], (err, videoResults) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.query(imageQuery, [gameId], (err, imageResults) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            res.json({
+                videos: videoResults,
+                images: imageResults
+            });
+        });
     });
 });
 

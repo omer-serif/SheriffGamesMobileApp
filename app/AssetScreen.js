@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, TextInput, ActivityIndicator,
@@ -10,6 +9,9 @@ import { AssetCard, SectionTitle } from '../components';
 const ASSET_TYPES = ['Tümü', 'Karakter', 'UI', 'Ses', 'Çevre', 'Animasyon'];
 const API_URL = 'http://localhost:3001';
 
+// Kendi logonuzu varsayılan resim olarak projeye dahil ediyoruz
+const DEFAULT_IMAGE = require('../assets/images/sheriffGamesLogo.png');
+
 export default function AssetsScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState('Tümü');
@@ -18,7 +20,8 @@ export default function AssetsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/assets`)
+    // Rota /api/assets olarak güncellendi (server.js'deki yapıya uygun olması için)
+    fetch(`${API_URL}/api/assets`)
       .then(response => response.json())
       .then(data => {
         const formattedAssets = data.map(item => ({
@@ -26,7 +29,10 @@ export default function AssetsScreen({ navigation }) {
           title: item.assetName,
           price: item.assetPrice || 0,
           type: item.typeNames ? item.typeNames.split(', ')[0] : 'Diğer',
-          image: item.assetImage ? `${API_URL}/uploads/${item.assetImage}` : 'https://via.placeholder.com/400x250',
+          // Resim varsa obje ({ uri: ... }), yoksa doğrudan require() dönüyoruz
+          image: item.assetImage 
+            ? { uri: `${API_URL}/uploads/${item.assetImage}` } 
+            : DEFAULT_IMAGE,
         }));
         
         setAssets(formattedAssets);
@@ -54,9 +60,33 @@ export default function AssetsScreen({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={COLORS.assetTagColor} />
+        <ActivityIndicator size="large" color={COLORS.accentColor} />
         <Text style={{ color: COLORS.white, marginTop: 10 }}>Assetler Yükleniyor...</Text>
       </SafeAreaView>
     );
   }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+       {/* Dosyanın orijinal return bloğunun devamı (Flatlist vs.) */}
+       <View style={{ padding: SPACING.md }}>
+         <TextInput 
+           style={{ backgroundColor: COLORS.cardBg, color: COLORS.white, padding: 10, borderRadius: RADIUS.sm }}
+           placeholder="Asset Ara..."
+           placeholderTextColor={COLORS.mutedText}
+           value={search}
+           onChangeText={setSearch}
+         />
+       </View>
+       <FlatList
+         data={filteredAssets}
+         keyExtractor={(item) => item.id}
+         renderItem={renderAsset}
+       />
+    </SafeAreaView>
+  );
 }
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bgColor },
+});

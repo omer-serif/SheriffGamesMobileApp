@@ -73,25 +73,43 @@ app.get('/asset-types', (req, res) => {
 
 app.get('/games', (req, res) => {
     const { search, category, priceType } = req.query;
+
+    // Temel sorgu: Bridge table (gametypes_game) ile her zaman JOIN halinde
     let sql = `
         SELECT G.gamesID, G.gameName, G.gamePrice, G.gameDescription, G.gameImage, G.gameFile,
         GROUP_CONCAT(GT.gameType SEPARATOR ', ') as categoryNames 
         FROM Games G
         LEFT JOIN gametypes_game GTG ON G.gamesID = GTG.game
         LEFT JOIN gametypes GT ON GTG.gameType = GT.gameTypeID
-        WHERE 1=1 
     `;
+
+    let conditions = [];
     let params = [];
-    if (search && search.trim() !== '') { sql += " AND G.gameName LIKE ?"; params.push(`%${search}%`); }
-    if (priceType && priceType !== 'all') {
-        if (priceType === 'free') sql += " AND (G.gamePrice = 0 OR G.gamePrice IS NULL)";
-        else if (priceType === 'paid') sql += " AND G.gamePrice > 0";
-    }
-    if (category && category !== 'All') {
-        sql += ` AND G.gamesID IN (SELECT game FROM gametypes_game WHERE gameType = (SELECT gameTypeID FROM gametypes WHERE gameType = ?))`;
+
+    // Kategori filtresi: gametypes_game tablosundaki gameType üzerinden doğrudan ilişki
+    if (category && category !== 'Tümü') {
+        sql += ` JOIN gametypes_game GTG_Filter ON G.gamesID = GTG_Filter.game 
+                 JOIN gametypes GT_Filter ON GTG_Filter.gameType = GT_Filter.gameTypeID `;
+        conditions.push("GT_Filter.gameType = ?");
         params.push(category);
     }
+
+    // Arama ve Fiyat filtreleri
+    if (search && search.trim() !== '') { 
+        conditions.push("G.gameName LIKE ?"); 
+        params.push(`%${search}%`); 
+    }
+    
+    if (priceType === 'free') conditions.push("(G.gamePrice = 0 OR G.gamePrice IS NULL)");
+    else if (priceType === 'paid') conditions.push("G.gamePrice > 0");
+
+    // WHERE koşullarını birleştir
+    if (conditions.length > 0) {
+        sql += " WHERE " + conditions.join(" AND ");
+    }
+
     sql += ` GROUP BY G.gamesID, G.gameName, G.gamePrice, G.gameDescription, G.gameImage, G.gameFile ORDER BY G.gamesID DESC`;
+
     db.query(sql, params, (err, data) => {
         if (err) return res.status(500).json({ error: err.sqlMessage });
         return res.json(data);
@@ -512,7 +530,7 @@ app.put('/api/update-item', upload.fields([
             // ZİNCİRLEME İŞLEMLER
             processDeletions((err) => {
                 if (err) return db.rollback(() => res.status(500).json({ error: "Silme hatası" }));
-                
+
                 processTestProgram((err) => {
                     if (err) return db.rollback(() => res.status(500).json({ error: "Test programı hatası" }));
 
@@ -592,6 +610,33 @@ app.get('/api/game-comments/:gameID', (req, res) => {
     db.query(sql, [req.params.gameID], (err, data) => {
         if (err) return res.status(500).json(err);
         return res.json(data);
+    });
+});
+
+
+// --- ANA SAYFA İÇİN TÜM OYUNLARI GETİR ---
+app.get('/api/games', (req, res) => {
+    // Veritabanındaki tüm oyunları en son eklenenden (DESC) en eskiye doğru çeker
+    const query = "SELECT * FROM Games ORDER BY gamesID DESC";
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Oyunlar çekilirken hata:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
+    });
+});
+
+// --- ANA SAYFA İÇİN TÜM ASSETLERİ GETİR ---
+app.get('/api/assets', (req, res) => {
+    // Veritabanındaki tüm assetleri en son eklenenden (DESC) en eskiye doğru çeker
+    const query = "SELECT * FROM Assets ORDER BY assetID DESC";
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Assetler çekilirken hata:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
     });
 });
 
@@ -716,21 +761,21 @@ app.get('/api/publisher-total-stats/:userID', (req, res) => {
 
 // Dashboard'da kullanıcının "Test Programındaki" oyunlarını getiren API
 app.get('/api/my-test-games/:userId', (req, res) => {
-  const userId = req.params.userId;
-  const query = `
+    const userId = req.params.userId;
+    const query = `
     SELECT g.gamesID as id, g.gameName, g.gameImage as gameCover 
     FROM Games g
     JOIN TestGames tg ON g.gamesID = tg.gameId
     JOIN UserGameDevelops ugd ON g.gamesID = ugd.game
     WHERE ugd.user = ?
   `;
-  db.query(query, [userId], (err, results) => {
-    if (err) {
-      console.error("Test oyunları çekilirken hata:", err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(results);
-  });
+    db.query(query, [userId], (err, results) => {
+        if (err) {
+            console.error("Test oyunları çekilirken hata:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
+    });
 });
 
 // 2. Belirli bir test oyununun Video ve Fotoğraflarını getiren API
