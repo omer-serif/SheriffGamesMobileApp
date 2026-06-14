@@ -69,7 +69,7 @@ export default function DashboardScreen() {
         fetch(`${API_URL}/api/my-games/${userID}`),
         fetch(`${API_URL}/api/my-assets/${userID}`),
         fetch(`${API_URL}/api/my-sales/${userID}`),
-        fetch(`${API_URL}/api/my-test-games/${userID}`) // Test oyunları da paralel çekiliyor
+        fetch(`${API_URL}/api/my-test-games/${userID}`)
       ]);
 
       setMyGames(await gamesRes.json());
@@ -85,19 +85,25 @@ export default function DashboardScreen() {
 
   useFocusEffect(useCallback(() => { fetchDashboardData(); }, []));
 
-  // TEST MEDYALARINI AÇ
+  // TEST MEDYALARINI AÇ VE AKILLI SEKME (KAYBOLAN KOD DÜZELTİLDİ)
   const openTestMedia = async (game) => {
     setSelectedTestGame(game);
     setTestCenterVisible(false); // İlk modalı kapat
-    setTimeout(() => {
-      setMediaModalVisible(true); // Gecikmeli olarak medya modalını aç (Geçiş efekti için)
-      setMediaTab('video');
-    }, 400);
-
+    
     try {
-      const res = await fetch(`${API_URL}/api/test-media/${game.id}`);
+      // Güvenlik: game.id veya game.gamesID okumasını garantile
+      const res = await fetch(`${API_URL}/api/test-media/${game.id || game.gamesID}`);
       const data = await res.json();
       setTestMedia(data);
+
+      // AKILLI TAB MANTIĞI: Video yoksa ama fotoğraf varsa direkt fotoğrafları aç!
+      const defaultTab = (data.videos.length === 0 && data.images.length > 0) ? 'image' : 'video';
+
+      setTimeout(() => {
+        setMediaTab(defaultTab);
+        setMediaModalVisible(true);
+      }, 400);
+
     } catch (err) {
       console.error("Medya çekilemedi", err);
     }
@@ -166,11 +172,8 @@ export default function DashboardScreen() {
   // DÜZENLEME MODALINI AÇ VE GALERİ DETAYLARINI ÇEK
   const openEditModal = async (type, item) => {
     const id = type === 'Game' ? item.gamesID : item.assetID;
-    // Eğer oyun düzenleniyorsa, bu oyunun şu an test programında olup olmadığını kontrol et
     if (type === 'Game') {
-      // testGames bir dizi değilse boş dizi [] olarak kabul et, çökmeyi engelle
       const safeTestGames = Array.isArray(testGames) ? testGames : [];
-      // ID eşleşmesini hem id hem de gamesID ihtimaline karşı kontrol et
       const isCurrentlyTest = safeTestGames.some(tg => (tg.id === id || tg.gamesID === id));
       setEditIsTestGame(isCurrentlyTest);
     } else {
@@ -183,7 +186,6 @@ export default function DashboardScreen() {
     setEditPrice((type === 'Game' ? item.gamePrice : item.assetPrice)?.toString() || '0');
     setEditCoverImage(null);
 
-    // Galeri state'lerini sıfırla
     setEditGalleryImages([]);
     setNewGalleryImages([]);
     setDeletedGalleryIDs([]);
@@ -199,17 +201,15 @@ export default function DashboardScreen() {
 
   const handleTestGameToggle = (newValue) => {
     if (!newValue) {
-      // true'dan false'a çekiliyorsa uyarı ver
       Alert.alert(
         "⚠️ Test Programından Çık",
         "Oyunu test programından çıkarırsanız, oyuncuların gönderdiği tüm test videoları ve fotoğrafları kalıcı olarak silinecektir. Bu işlem geri alınamaz. Onaylıyor musunuz?",
         [
-          { text: "İptal", style: "cancel", onPress: () => setEditIsTestGame(true) }, // Vazgeçerse switch'i geri true yap
+          { text: "İptal", style: "cancel", onPress: () => setEditIsTestGame(true) }, 
           { text: "Evet, Çıkar ve Sil", style: "destructive", onPress: () => setEditIsTestGame(false) }
         ]
       );
     } else {
-      // false'tan true'ya çekiliyorsa direkt onayla
       setEditIsTestGame(true);
     }
   };
@@ -462,7 +462,6 @@ export default function DashboardScreen() {
             <TouchableOpacity onPress={() => setEditModalVisible(false)}><Text style={styles.closeBtn}>✖</Text></TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-
             <Text style={styles.label}>Ad</Text>
             <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholderTextColor={COLORS.mutedText} />
 
@@ -544,7 +543,6 @@ export default function DashboardScreen() {
             <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit} disabled={isSaving}>
               {isSaving ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveBtnText}>Değişiklikleri Kaydet</Text>}
             </TouchableOpacity>
-
             <View style={{ height: 40 }} />
           </ScrollView>
         </SafeAreaView>
@@ -586,9 +584,11 @@ export default function DashboardScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* --- TEST MEDYALARI MODALI --- */}
+      {/* --- TEST MEDYALARI MODALI (KAYBOLAN KODLAR GERİ EKLENDİ) --- */}
       <Modal visible={mediaModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
+          
+          {/* EKSİK OLAN BAŞLIK VE KAPATMA BUTONU */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle} numberOfLines={1}>
               {selectedTestGame?.gameName} - Medyalar
@@ -598,6 +598,7 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* EKSİK OLAN SEKME (TAB) BUTONLARI */}
           <View style={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg }}>
             <View style={styles.tabContainer}>
               <TouchableOpacity style={[styles.tabBtn, mediaTab === 'video' && styles.tabBtnActive]} onPress={() => setMediaTab('video')}>
@@ -609,12 +610,22 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          <ScrollView style={styles.modalBody}>
+          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             {mediaTab === 'video' ? (
               testMedia.videos.length > 0 ? (
                 testMedia.videos.map(v => (
-                  <View key={v.id} style={styles.commentBox}>
-                    <Text style={styles.commentText}>🎥 {v.videoPath}</Text>
+                  <View key={v.id} style={styles.feedbackCard}>
+                    <View style={styles.mediaPreviewBox}>
+                      <Text style={{ color: COLORS.accentColor, fontSize: 30, marginBottom: 10 }}>🎥</Text>
+                      <Text style={{ color: COLORS.white, fontSize: 12 }}>{v.videoPath}</Text>
+                    </View>
+                    <View style={styles.feedbackContent}>
+                      <Text style={styles.feedbackLabel}>Oyuncu Geri Bildirimi:</Text>
+                      <Text style={styles.feedbackText}>
+                        {v.description && v.description.trim() !== '' ? v.description : 'Açıklama girilmemiş.'}
+                      </Text>
+                      <Text style={styles.feedbackDate}>{new Date(v.createdAt).toLocaleString('tr-TR')}</Text>
+                    </View>
                   </View>
                 ))
               ) : (
@@ -623,14 +634,27 @@ export default function DashboardScreen() {
             ) : (
               testMedia.images.length > 0 ? (
                 testMedia.images.map(img => (
-                  <View key={img.id} style={styles.commentBox}>
-                    <Text style={styles.commentText}>🖼️ {img.imagePath}</Text>
+                  <View key={img.id} style={styles.feedbackCard}>
+                    <View style={[styles.mediaPreviewBox, { padding: 0, backgroundColor: '#000' }]}>
+                      <Image
+                        source={{ uri: `${API_URL}/uploads/${img.imagePath}` }}
+                        style={{ width: '100%', height: 220, resizeMode: 'contain' }}
+                      />
+                    </View>
+                    <View style={styles.feedbackContent}>
+                      <Text style={styles.feedbackLabel}>Oyuncu Geri Bildirimi:</Text>
+                      <Text style={styles.feedbackText}>
+                        {img.description && img.description.trim() !== '' ? img.description : 'Açıklama girilmemiş.'}
+                      </Text>
+                      <Text style={styles.feedbackDate}>{new Date(img.createdAt).toLocaleString('tr-TR')}</Text>
+                    </View>
                   </View>
                 ))
               ) : (
                 <Text style={styles.emptyText}>Henüz test fotoğrafı gönderilmemiş.</Text>
               )
             )}
+            <View style={{ height: 50 }} />
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -654,7 +678,6 @@ const styles = StyleSheet.create({
   userName: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold', marginBottom: 4 },
   userRole: { color: COLORS.mutedText, fontSize: FONTS.sizes.sm },
 
-  // Test Merkezi Butonu İçin Yeni Stil
   testCenterBtn: {
     backgroundColor: 'rgba(233,69,96,0.1)',
     flexDirection: 'row',
@@ -692,14 +715,12 @@ const styles = StyleSheet.create({
   actionBtnText: { color: COLORS.white, fontSize: FONTS.sizes.sm, fontWeight: 'bold' },
   emptyText: { color: COLORS.mutedText, textAlign: 'center', marginTop: SPACING.xl, fontSize: FONTS.sizes.md },
 
-  // Modallar
   modalContainer: { flex: 1, backgroundColor: COLORS.bgColor },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.xl, borderBottomWidth: 1, borderColor: '#333' },
   modalTitle: { color: COLORS.white, fontSize: FONTS.sizes.lg, fontWeight: 'bold' },
   closeBtn: { color: COLORS.accentColor, fontSize: 24, fontWeight: 'bold' },
   modalBody: { padding: SPACING.xl },
 
-  // Grafik
   chartWrapper: { backgroundColor: COLORS.cardBg, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.accentColor, marginBottom: SPACING.xl },
   chartTitle: { color: COLORS.white, textAlign: 'center', marginBottom: SPACING.md, fontWeight: 'bold' },
   tableHeader: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#333', paddingBottom: SPACING.sm, marginBottom: SPACING.sm },
@@ -707,14 +728,12 @@ const styles = StyleSheet.create({
   tableRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.md, borderBottomWidth: 1, borderColor: '#222' },
   tableRowText: { color: COLORS.white, fontSize: 12, flex: 1, textAlign: 'center' },
 
-  // Yorumlar Modalı Stilleri
   commentBox: { backgroundColor: COLORS.cardBg, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md, borderWidth: 1, borderColor: '#333' },
   commentHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.sm },
   commentUser: { color: COLORS.accentColor, fontWeight: 'bold', fontSize: FONTS.sizes.sm },
   commentDate: { color: COLORS.mutedText, fontSize: 10 },
   commentText: { color: COLORS.white, fontSize: FONTS.sizes.sm, lineHeight: 20 },
 
-  // Düzenleme Formu
   label: { color: COLORS.accentColor, fontWeight: 'bold', marginBottom: SPACING.sm, marginTop: SPACING.md },
   input: { backgroundColor: COLORS.cardBg, color: COLORS.white, padding: SPACING.md, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444' },
   imagePickerBtn: { backgroundColor: COLORS.cardBg, height: 100, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
@@ -723,12 +742,18 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: COLORS.accentColor, padding: SPACING.lg, borderRadius: RADIUS.sm, alignItems: 'center', marginTop: SPACING.xxl },
   saveBtnText: { color: COLORS.white, fontWeight: 'bold', fontSize: FONTS.sizes.md },
 
-  // Galeri Yönetimi Stilleri
   addGalleryBtn: { backgroundColor: COLORS.cardBg, padding: SPACING.lg, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444', borderStyle: 'dashed', alignItems: 'center' },
   addGalleryBtnText: { color: COLORS.mutedText, fontWeight: 'bold' },
   galleryContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: SPACING.sm },
   galleryThumbWrapper: { position: 'relative', width: 75, height: 75, marginBottom: 5 },
   galleryThumb: { width: '100%', height: '100%', borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#444' },
   removeBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: COLORS.accentColor, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  removeBadgeText: { color: COLORS.white, fontSize: 10, fontWeight: 'bold' }
+  removeBadgeText: { color: COLORS.white, fontSize: 10, fontWeight: 'bold' },
+
+  feedbackCard: { backgroundColor: COLORS.cardBg, borderRadius: RADIUS.md, marginBottom: SPACING.lg, borderWidth: 1, borderColor: '#333', overflow: 'hidden' },
+  mediaPreviewBox: { backgroundColor: '#111', padding: SPACING.xl, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: '#333' },
+  feedbackContent: { padding: SPACING.md },
+  feedbackLabel: { color: COLORS.accentColor, fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
+  feedbackText: { color: COLORS.white, fontSize: FONTS.sizes.sm, lineHeight: 20 },
+  feedbackDate: { color: COLORS.mutedText, fontSize: 10, marginTop: 10, textAlign: 'right' }
 });

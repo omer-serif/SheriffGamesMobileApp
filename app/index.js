@@ -57,7 +57,7 @@ export default function HomeScreen() {
           title: item.gameName,
           price: item.gamePrice,
           // Backend'den gelen kategori isimlerini temizle
-          genre: item.categoryNames || "", 
+          genre: item.categoryNames || "",
           image: item.gameImage ? { uri: `${API_URL}/uploads/${item.gameImage}` } : DEFAULT_IMAGE,
         }));
 
@@ -101,18 +101,18 @@ export default function HomeScreen() {
   // GÜNCEL VE HATASIZ FİLTRELEME MANTIĞI
   const filteredData = viewMode === 'games'
     ? games.filter(g => {
-        const matchesSearch = (g.title || "").toLowerCase().includes(search.toLowerCase());
-        const filterStr = selectedFilter.toLowerCase();
-        // categoryNames "RPG, Aksiyon" gibi gelebilir, temizleyip kontrol ediyoruz
-        const matchesFilter = selectedFilter === 'Tümü' || (g.genre && g.genre.toLowerCase().includes(filterStr));
-        return matchesSearch && matchesFilter;
-      })
+      const matchesSearch = (g.title || "").toLowerCase().includes(search.toLowerCase());
+      const filterStr = selectedFilter.toLowerCase();
+      // categoryNames "RPG, Aksiyon" gibi gelebilir, temizleyip kontrol ediyoruz
+      const matchesFilter = selectedFilter === 'Tümü' || (g.genre && g.genre.toLowerCase().includes(filterStr));
+      return matchesSearch && matchesFilter;
+    })
     : assets.filter(a => {
-        const matchesSearch = (a.title || "").toLowerCase().includes(search.toLowerCase());
-        const filterStr = selectedFilter.toLowerCase();
-        const matchesFilter = selectedFilter === 'Tümü' || (a.type && a.type.toLowerCase().includes(filterStr));
-        return matchesSearch && matchesFilter;
-      });
+      const matchesSearch = (a.title || "").toLowerCase().includes(search.toLowerCase());
+      const filterStr = selectedFilter.toLowerCase();
+      const matchesFilter = selectedFilter === 'Tümü' || (a.type && a.type.toLowerCase().includes(filterStr));
+      return matchesSearch && matchesFilter;
+    });
 
   const newArrivals = [...games].reverse().slice(0, 5);
 

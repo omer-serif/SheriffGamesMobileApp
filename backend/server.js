@@ -71,10 +71,10 @@ app.get('/asset-types', (req, res) => {
     });
 });
 
-app.get('/games', (req, res) => {
+// --- OYUNLAR İÇİN ANA API (GELİŞMİŞ FİLTRELEME & ÇAKIŞMA ÖNLENDİ) ---
+app.get('/api/games', (req, res) => {
     const { search, category, priceType } = req.query;
 
-    // Temel sorgu: Bridge table (gametypes_game) ile her zaman JOIN halinde
     let sql = `
         SELECT G.gamesID, G.gameName, G.gamePrice, G.gameDescription, G.gameImage, G.gameFile,
         GROUP_CONCAT(GT.gameType SEPARATOR ', ') as categoryNames 
@@ -86,7 +86,6 @@ app.get('/games', (req, res) => {
     let conditions = [];
     let params = [];
 
-    // Kategori filtresi: gametypes_game tablosundaki gameType üzerinden doğrudan ilişki
     if (category && category !== 'Tümü') {
         sql += ` JOIN gametypes_game GTG_Filter ON G.gamesID = GTG_Filter.game 
                  JOIN gametypes GT_Filter ON GTG_Filter.gameType = GT_Filter.gameTypeID `;
@@ -94,16 +93,14 @@ app.get('/games', (req, res) => {
         params.push(category);
     }
 
-    // Arama ve Fiyat filtreleri
-    if (search && search.trim() !== '') { 
-        conditions.push("G.gameName LIKE ?"); 
-        params.push(`%${search}%`); 
+    if (search && search.trim() !== '') {
+        conditions.push("G.gameName LIKE ?");
+        params.push(`%${search}%`);
     }
-    
+
     if (priceType === 'free') conditions.push("(G.gamePrice = 0 OR G.gamePrice IS NULL)");
     else if (priceType === 'paid') conditions.push("G.gamePrice > 0");
 
-    // WHERE koşullarını birleştir
     if (conditions.length > 0) {
         sql += " WHERE " + conditions.join(" AND ");
     }
@@ -116,27 +113,41 @@ app.get('/games', (req, res) => {
     });
 });
 
-app.get('/assets', (req, res) => {
-    const { search, type, priceType } = req.query;
+// --- ASSETLER İÇİN ANA API (GELİŞMİŞ FİLTRELEME & ÇAKIŞMA ÖNLENDİ) ---
+app.get('/api/assets', (req, res) => {
+    const { search, category, priceType } = req.query; // Mobil taraf 'category' yolluyor
     let sql = `
         SELECT A.assetID, A.assetName, A.assetPrice, A.assetDescription, A.assetImage, A.assetFile,
         GROUP_CONCAT(AT.type SEPARATOR ', ') as typeNames 
         FROM Assets A
         LEFT JOIN assettypes_asset ATA ON A.assetID = ATA.asset
         LEFT JOIN assettypes AT ON ATA.assetType = AT.assetTypeID
-        WHERE 1=1
     `;
+
+    let conditions = [];
     let params = [];
-    if (search && search.trim() !== '') { sql += " AND A.assetName LIKE ?"; params.push(`%${search}%`); }
-    if (priceType && priceType !== 'all') {
-        if (priceType === 'free') sql += " AND (A.assetPrice = 0 OR A.assetPrice IS NULL)";
-        else if (priceType === 'paid') sql += " AND A.assetPrice > 0";
+
+    if (category && category !== 'Tümü') {
+        sql += ` JOIN assettypes_asset ATA_Filter ON A.assetID = ATA_Filter.asset 
+                 JOIN assettypes AT_Filter ON ATA_Filter.assetType = AT_Filter.assetTypeID `;
+        conditions.push("AT_Filter.type = ?");
+        params.push(category);
     }
-    if (type && type !== 'All') {
-        sql += " AND A.assetID IN (SELECT asset FROM assettypes_asset WHERE assetType = ?)";
-        params.push(type);
+
+    if (search && search.trim() !== '') {
+        conditions.push("A.assetName LIKE ?");
+        params.push(`%${search}%`);
     }
-    sql += " GROUP BY A.assetID, A.assetName, A.assetPrice, A.assetDescription, A.assetImage, A.assetFile ORDER BY A.assetID DESC";
+
+    if (priceType === 'free') conditions.push("(A.assetPrice = 0 OR A.assetPrice IS NULL)");
+    else if (priceType === 'paid') conditions.push("A.assetPrice > 0");
+
+    if (conditions.length > 0) {
+        sql += " WHERE " + conditions.join(" AND ");
+    }
+
+    sql += ` GROUP BY A.assetID, A.assetName, A.assetPrice, A.assetDescription, A.assetImage, A.assetFile ORDER BY A.assetID DESC`;
+
     db.query(sql, params, (err, data) => {
         if (err) return res.status(500).json({ error: err.sqlMessage });
         return res.json(data);
@@ -283,8 +294,8 @@ app.get('/api/my-library/:userId', (req, res) => {
         });
     });
 });
-// --- 2. TEST MEDYASI YÜKLEME API'Sİ ---
-// Test dosyaları için Multer ayarı (Fotoğraflar ve Videolar için)
+
+// --- 2. TEST MEDYASI YÜKLEME API'Sİ (YAZI/AÇIKLAMA DESTEKLİ) ---
 const testMediaStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, 'uploads/'),
     filename: (req, file, cb) => cb(null, 'test-media-' + Date.now() + path.extname(file.originalname))
@@ -292,22 +303,47 @@ const testMediaStorage = multer.diskStorage({
 const uploadTestMedia = multer({ storage: testMediaStorage });
 
 app.post('/api/upload-test-media', uploadTestMedia.single('mediaFile'), (req, res) => {
-    const { gameId, userId, mediaType } = req.body; // mediaType: 'video' veya 'image'
+    const { gameId, userId, mediaType, description } = req.body;
     const filePath = req.file ? req.file.filename : null;
 
-    if (!filePath) return res.status(400).json({ error: 'Medya dosyası alınamadı.' });
+    // GÜVENLİK DUVARI: React Native'den veriler eksik gelirse veritabanını bozmayı reddet
+    if (!gameId || !userId || !filePath || gameId === 'undefined' || userId === 'undefined') {
+        console.error("Yükleme reddedildi: Eksik veri geldi.");
+        return res.status(400).json({ error: 'Eksik veya hatalı veri gönderildi.' });
+    }
 
     const table = mediaType === 'video' ? 'TestVideos' : 'TestImages';
     const column = mediaType === 'video' ? 'videoPath' : 'imagePath';
 
-    const query = `INSERT INTO ${table} (gameId, userId, ${column}) VALUES (?, ?, ?)`;
+    const query = `INSERT INTO ${table} (gameId, userId, ${column}, description) VALUES (?, ?, ?, ?)`;
 
-    db.query(query, [gameId, userId, filePath], (err, result) => {
+    db.query(query, [gameId, userId, filePath, description || ''], (err, result) => {
         if (err) {
             console.error("Test medyası veritabanına eklenemedi:", err);
             return res.status(500).json({ error: err.message });
         }
         res.json({ status: "Success", message: "Test geri bildiriminiz başarıyla gönderildi!" });
+    });
+});
+
+app.get('/api/test-media/:gameId', (req, res) => {
+    const gameId = req.params.gameId;
+
+    // SELECT sorgularına 'description' sütunu eklendi
+    const videoQuery = "SELECT id, videoPath, description, createdAt FROM TestVideos WHERE gameId = ?";
+    const imageQuery = "SELECT id, imagePath, description, createdAt FROM TestImages WHERE gameId = ?";
+
+    db.query(videoQuery, [gameId], (err, videoResults) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.query(imageQuery, [gameId], (err, imageResults) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            res.json({
+                videos: videoResults,
+                images: imageResults
+            });
+        });
     });
 });
 
@@ -613,33 +649,6 @@ app.get('/api/game-comments/:gameID', (req, res) => {
     });
 });
 
-
-// --- ANA SAYFA İÇİN TÜM OYUNLARI GETİR ---
-app.get('/api/games', (req, res) => {
-    // Veritabanındaki tüm oyunları en son eklenenden (DESC) en eskiye doğru çeker
-    const query = "SELECT * FROM Games ORDER BY gamesID DESC";
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error("Oyunlar çekilirken hata:", err);
-            return res.status(500).json({ error: err.message });
-        }
-        res.json(results);
-    });
-});
-
-// --- ANA SAYFA İÇİN TÜM ASSETLERİ GETİR ---
-app.get('/api/assets', (req, res) => {
-    // Veritabanındaki tüm assetleri en son eklenenden (DESC) en eskiye doğru çeker
-    const query = "SELECT * FROM Assets ORDER BY assetID DESC";
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error("Assetler çekilirken hata:", err);
-            return res.status(500).json({ error: err.message });
-        }
-        res.json(results);
-    });
-});
-
 app.post('/api/add-game-comment', (req, res) => {
     const { gameID, userID, commentText } = req.body;
     const sql = "INSERT INTO GameComments (gameID, userID, commentText) VALUES (?, ?, ?)";
@@ -757,7 +766,6 @@ app.get('/api/publisher-total-stats/:userID', (req, res) => {
         return res.json(data);
     });
 });
-
 
 // Dashboard'da kullanıcının "Test Programındaki" oyunlarını getiren API
 app.get('/api/my-test-games/:userId', (req, res) => {
