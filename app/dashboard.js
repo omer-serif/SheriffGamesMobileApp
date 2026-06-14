@@ -89,7 +89,7 @@ export default function DashboardScreen() {
   const openTestMedia = async (game) => {
     setSelectedTestGame(game);
     setTestCenterVisible(false); // İlk modalı kapat
-    
+
     try {
       // Güvenlik: game.id veya game.gamesID okumasını garantile
       const res = await fetch(`${API_URL}/api/test-media/${game.id || game.gamesID}`);
@@ -205,7 +205,7 @@ export default function DashboardScreen() {
         "⚠️ Test Programından Çık",
         "Oyunu test programından çıkarırsanız, oyuncuların gönderdiği tüm test videoları ve fotoğrafları kalıcı olarak silinecektir. Bu işlem geri alınamaz. Onaylıyor musunuz?",
         [
-          { text: "İptal", style: "cancel", onPress: () => setEditIsTestGame(true) }, 
+          { text: "İptal", style: "cancel", onPress: () => setEditIsTestGame(true) },
           { text: "Evet, Çıkar ve Sil", style: "destructive", onPress: () => setEditIsTestGame(false) }
         ]
       );
@@ -587,7 +587,7 @@ export default function DashboardScreen() {
       {/* --- TEST MEDYALARI MODALI (KAYBOLAN KODLAR GERİ EKLENDİ) --- */}
       <Modal visible={mediaModalVisible} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
-          
+
           {/* EKSİK OLAN BAŞLIK VE KAPATMA BUTONU */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle} numberOfLines={1}>
@@ -612,19 +612,24 @@ export default function DashboardScreen() {
 
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             {mediaTab === 'video' ? (
-              testMedia.videos.length > 0 ? (
-                testMedia.videos.map(v => (
-                  <View key={v.id} style={styles.feedbackCard}>
-                    <View style={styles.mediaPreviewBox}>
-                      <Text style={{ color: COLORS.accentColor, fontSize: 30, marginBottom: 10 }}>🎥</Text>
-                      <Text style={{ color: COLORS.white, fontSize: 12 }}>{v.videoPath}</Text>
+              testMedia.images.length > 0 ? (
+                testMedia.images.map(img => (
+                  <View key={img.id} style={styles.feedbackCard}>
+                    <View style={[styles.mediaPreviewBox, { padding: 0, backgroundColor: '#000' }]}>
+
+                      {/* KÖKTEN ÇÖZÜM: img.imagePath YOKSA img.image'i KULLAN */}
+                      <Image
+                        source={{ uri: `${API_URL}/uploads/${img.imagePath || img.image}` }}
+                        style={{ width: '100%', height: 220, resizeMode: 'contain' }}
+                      />
+
                     </View>
                     <View style={styles.feedbackContent}>
                       <Text style={styles.feedbackLabel}>Oyuncu Geri Bildirimi:</Text>
                       <Text style={styles.feedbackText}>
-                        {v.description && v.description.trim() !== '' ? v.description : 'Açıklama girilmemiş.'}
+                        {img.description && img.description.trim() !== '' ? img.description : 'Açıklama girilmemiş.'}
                       </Text>
-                      <Text style={styles.feedbackDate}>{new Date(v.createdAt).toLocaleString('tr-TR')}</Text>
+                      <Text style={styles.feedbackDate}>{new Date(img.createdAt).toLocaleString('tr-TR')}</Text>
                     </View>
                   </View>
                 ))

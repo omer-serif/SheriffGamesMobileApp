@@ -54,7 +54,7 @@ export default function LibraryScreen() {
   };
 
   // 1. AŞAMA: Sadece Medyayı Seç
-  const pickMedia = async (mediaType) => {
+ const pickMedia = async (mediaType) => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: mediaType === 'video' ? ImagePicker.MediaTypeOptions.Videos : ImagePicker.MediaTypeOptions.Images,
       allowsEditing: mediaType === 'image',
@@ -63,18 +63,21 @@ export default function LibraryScreen() {
 
     if (!result.canceled) {
       const localUri = result.assets[0].uri;
-      const filename = localUri.split('/').pop();
-
+      let filename = localUri.split('/').pop();
+      
       let type = '';
       if (mediaType === 'video') {
         const match = /\.(\w+)$/.exec(filename);
         type = match ? `video/${match[1]}` : `video/mp4`;
+        // KÖKTEN ÇÖZÜM: Uzantı yoksa zorla .mp4 ekle (Web'in anlaması için)
+        if (!filename.includes('.')) filename += '.mp4'; 
       } else {
         const match = /\.(\w+)$/.exec(filename);
         type = match ? `image/${match[1]}` : `image/jpeg`;
+        // KÖKTEN ÇÖZÜM: Uzantı yoksa zorla .jpg ekle (Web'in anlaması için)
+        if (!filename.includes('.')) filename += '.jpg';
       }
 
-      // Medyayı state'e kaydet ve kullanıcının açıklama yazması için formu göster
       setSelectedMediaInfo({ uri: localUri, name: filename, type, mediaType });
     }
   };
