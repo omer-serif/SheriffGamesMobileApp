@@ -34,19 +34,6 @@ Sistemin web sürümü ve Node.js/MySQL tabanlı merkezi API'si ile tam senkroni
 
 ---
 
-## 📱 Ekran Görüntüleri
-
-<p align="center">
-  <img src="https://via.placeholder.com/200x400/161625/e94560?text=Giris+Ekrani" width="200" alt="Giriş Ekranı">
-  <img src="https://via.placeholder.com/200x400/161625/e94560?text=Oyun+Vitrini" width="200" alt="Vitrin">
-  <img src="https://via.placeholder.com/200x400/161625/e94560?text=Kutuphane" width="200" alt="Kütüphane">
-  <img src="https://via.placeholder.com/200x400/161625/e94560?text=Test+Merkezi" width="200" alt="Test Merkezi">
-</p>
-
-> Ekran görüntülerini yükledikten sonra bu linkleri kendi resim yollarınla değiştirebilirsin.
-
----
-
 ## ⚙️ Kurulum ve Çalıştırma
 
 ### Ön Koşullar
